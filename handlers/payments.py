@@ -19,7 +19,6 @@ class PaymentStates(StatesGroup):
 
 # Credit packages - правильные цены
 CREDIT_PACKAGES = {
-    "test_package": {"credits": 1, "price_stars": 1, "price_rub": 1, "title": "🧪 ТЕСТ (1₽)", "test": True},
     "package_1": {"credits": 10, "price_stars": 79, "price_rub": 79, "title": "1 генерация видео (10 кредитов)"},
     "package_5": {"credits": 50, "price_stars": 399, "price_rub": 399, "title": "5 генераций видео (50 кредитов)"},
     "package_10": {"credits": 100, "price_stars": 749, "price_rub": 749, "title": "10 генераций видео (100 кредитов)", "popular": True},
