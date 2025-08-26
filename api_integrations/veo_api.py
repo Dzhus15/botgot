@@ -361,6 +361,7 @@ class VeoAPI:
     
     async def _notify_user_completion(self, user_id: int, video_url: str, task_id: str):
         """Notify user about video completion"""
+        bot = None
         try:
             logger.info(f"Notifying user {user_id} about completion: {task_id}")
             
@@ -387,9 +388,14 @@ class VeoAPI:
             
         except Exception as e:
             logger.error(f"Error notifying user {user_id}: {e}")
+        finally:
+            # Properly close bot session
+            if bot:
+                await bot.session.close()
     
     async def _notify_user_failure(self, user_id: int, error_message: str):
         """Notify user about generation failure"""
+        bot = None
         try:
             logger.info(f"Notifying user {user_id} about failure: {error_message}")
             
@@ -412,6 +418,10 @@ class VeoAPI:
             
         except Exception as e:
             logger.error(f"Error notifying user failure {user_id}: {e}")
+        finally:
+            # Properly close bot session
+            if bot:
+                await bot.session.close()
     
     def _get_user_friendly_error(self, error_message: str) -> str:
         """Convert technical error to user-friendly message"""

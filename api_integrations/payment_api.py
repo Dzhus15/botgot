@@ -312,6 +312,7 @@ class PaymentAPI:
     
     async def _notify_payment_success(self, user_id: int, credits_added: int, total_credits: int):
         """Notify user about successful payment"""
+        bot = None
         try:
             from aiogram import Bot
             bot = Bot(token=config.TELEGRAM_BOT_TOKEN)
@@ -336,3 +337,7 @@ class PaymentAPI:
             
         except Exception as e:
             logger.error(f"Error notifying payment success to user {user_id}: {e}")
+        finally:
+            # Properly close bot session to prevent unclosed client session error
+            if bot:
+                await bot.session.close()
