@@ -8,7 +8,7 @@ channel = "stable-25_05"
 packages = ["postgresql", "u-root-cmds"]
 
 [workflows]
-runButton = "Bot Server"
+runButton = "Clean Start Bot"
 
 [[workflows.workflow]]
 name = "Project"
@@ -60,6 +60,15 @@ args = "python main.py"
 
 [[workflows.workflow]]
 name = "Bot Server"
+author = 46909179
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python main.py"
+
+[[workflows.workflow]]
+name = "Clean Start Bot"
 author = 46909179
 mode = "sequential"
 

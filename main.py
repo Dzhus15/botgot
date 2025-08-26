@@ -88,8 +88,13 @@ async def start_bot_polling():
         
         logger.info("Bot starting polling...")
         
-        # Start polling
-        await dp.start_polling(bot, skip_updates=True)
+        # Start polling with proper error handling
+        try:
+            await dp.start_polling(bot, skip_updates=True)
+        except Exception as polling_error:
+            logger.error(f"Polling error: {polling_error}")
+            await bot.session.close()
+            raise
         
     except Exception as e:
         logger.error(f"Error starting bot: {e}")
@@ -134,13 +139,29 @@ async def main():
             # Create a future that will never complete to keep the event loop running
             stop_event = asyncio.Event()
             await stop_event.wait()
-        except asyncio.CancelledError:
+        except (asyncio.CancelledError, KeyboardInterrupt):
             logger.info("Application shutdown requested")
+        except Exception as e:
+            logger.error(f"Unexpected error in main loop: {e}")
         finally:
-            # Cleanup tasks
-            bot_task.cancel()
-            monitor_task.cancel()
+            # Cleanup tasks properly
+            logger.info("Cleaning up tasks...")
+            if not bot_task.done():
+                bot_task.cancel()
+                try:
+                    await bot_task
+                except asyncio.CancelledError:
+                    pass
+            
+            if not monitor_task.done():
+                monitor_task.cancel()
+                try:
+                    await monitor_task
+                except asyncio.CancelledError:
+                    pass
+            
             await runner.cleanup()
+            logger.info("Cleanup completed")
         
     except Exception as e:
         logger.error(f"Error starting application: {e}")
