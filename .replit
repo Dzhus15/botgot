@@ -36,6 +36,6 @@ localPort = 5000
 externalPort = 80
 
 [deployment]
-build = ["sh", "-c", "bash deploy_setup.sh"]
+build = ["sh", "-c", "pip install aiogram aiosqlite aiohttp"]
 run = ["sh", "-c", "python main.py"]
 deploymentTarget = "gce"
