@@ -85,13 +85,18 @@ async def main():
         logger.info("  POST /webhook/yookassa - YooKassa payment notifications")
         logger.info("  GET /health - Health check")
         
-        # Keep the server running
+        # Keep the server running indefinitely
         try:
-            while True:
-                await asyncio.sleep(3600)  # Sleep for 1 hour
+            # Create a future that will never complete to keep the event loop running
+            stop_event = asyncio.Event()
+            await stop_event.wait()
+        except asyncio.CancelledError:
+            logger.info("Application shutdown requested")
         finally:
+            # Cleanup tasks
             bot_task.cancel()
             monitor_task.cancel()
+            await runner.cleanup()
         
     except Exception as e:
         logger.error(f"Error starting application: {e}")

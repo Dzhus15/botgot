@@ -167,7 +167,12 @@ async def init_webhook_server():
     async def health(request):
         return web.Response(text="OK")
     
+    # Root endpoint for basic connectivity
+    async def root(request):
+        return web.Response(text="Telegram Bot Server Running", status=200)
+    
     app.router.add_get('/health', health)
+    app.router.add_get('/', root)
     
     return app
 
