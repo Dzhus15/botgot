@@ -86,7 +86,7 @@ class CreditManager:
             logger.error(f"Error checking credits for user {target_user_id}: {e}")
             return {"error": f"Ошибка при проверке кредитов: {str(e)}"}
     
-    async def grant_credits(self, admin_id: int, target_user_id: int, credits_amount: int, reason: str = "") -> Dict[str, Any]:
+    async def grant_credits(self, admin_id: int, target_user_id: int, credits_amount: int, reason: str = "", bot=None) -> Dict[str, Any]:
         """
         Выдает кредиты пользователю (только на production)
         
@@ -153,6 +153,26 @@ class CreditManager:
             
             logger.info(f"Admin {admin_id} granted {credits_amount} credits to user {target_user_id}. Balance: {old_credits} → {new_credits}")
             
+            # Отправляем уведомление пользователю, если есть бот
+            if bot:
+                try:
+                    notification_text = f"""
+🎉 <b>Вам начислены кредиты!</b>
+
+💎 <b>Получено кредитов:</b> {credits_amount}
+💰 <b>Ваш баланс:</b> {new_credits} кредитов
+
+📝 <b>Комментарий администратора:</b>
+{reason if reason else 'Без комментария'}
+
+Теперь вы можете создать {new_credits // 10} видео!
+                    """
+                    
+                    await bot.send_message(target_user_id, notification_text)
+                    logger.info(f"Notification sent to user {target_user_id} about credit grant")
+                except Exception as e:
+                    logger.warning(f"Failed to send notification to user {target_user_id}: {e}")
+            
             return {
                 "success": True,
                 "user_id": target_user_id,
@@ -160,7 +180,8 @@ class CreditManager:
                 "old_balance": old_credits,
                 "new_balance": new_credits,
                 "reason": reason,
-                "timestamp": datetime.now().isoformat()
+                "timestamp": datetime.now().isoformat(),
+                "notification_sent": bot is not None
             }
             
         except Exception as e:
@@ -183,7 +204,7 @@ async def check_user_credits(admin_id: int, user_id: int) -> Optional[Dict[str, 
     """
     return await credit_manager.get_user_credits(admin_id, user_id)
 
-async def grant_user_credits(admin_id: int, user_id: int, credits: int, reason: str = "") -> Dict[str, Any]:
+async def grant_user_credits(admin_id: int, user_id: int, credits: int, reason: str = "", bot=None) -> Dict[str, Any]:
     """
     Публичная функция для выдачи кредитов пользователю
     РАБОТАЕТ ТОЛЬКО НА PRODUCTION!
@@ -197,10 +218,10 @@ async def grant_user_credits(admin_id: int, user_id: int, credits: int, reason: 
     Returns:
         Результат операции
     """
-    return await credit_manager.grant_credits(admin_id, user_id, credits, reason)
+    return await credit_manager.grant_credits(admin_id, user_id, credits, reason, bot)
 
 # Функция для быстрого восстановления кредитов при deploy
-async def emergency_credit_restore(admin_id: int, user_id: int, credits: int, payment_id: str = "") -> Dict[str, Any]:
+async def emergency_credit_restore(admin_id: int, user_id: int, credits: int, payment_id: str = "", bot=None) -> Dict[str, Any]:
     """
     Экстренное восстановление кредитов (например, после технических проблем)
     
@@ -217,7 +238,7 @@ async def emergency_credit_restore(admin_id: int, user_id: int, credits: int, pa
     if payment_id:
         reason += f" для платежа {payment_id}"
     
-    return await grant_user_credits(admin_id, user_id, credits, reason)
+    return await grant_user_credits(admin_id, user_id, credits, reason, bot)
 
 if __name__ == "__main__":
     # Пример использования (только для тестирования)

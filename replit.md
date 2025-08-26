@@ -11,6 +11,9 @@ This is a Telegram bot that generates AI videos using Google's Veo 3 API through
 - ✅ Added manual credit management tool (admin_tools/credit_manager.py)
 - ✅ Hybrid database system: SQLite (current) + PostgreSQL ready for production
 - ✅ User 848867375 compensated with 35 credits for incorrect 399₽ package
+- ✅ **NEW**: Secure admin credit management system with production-only restrictions
+- ✅ **NEW**: Automatic user notifications when admin grants credits with custom comments
+- ✅ **NEW**: Complete audit trail for all admin credit operations
 
 # User Preferences
 
@@ -54,8 +57,14 @@ Integration with Veo 3 API through kie.ai platform supporting:
 Admin-only functionality includes:
 - User statistics and analytics dashboard
 - Broadcast messaging system with media support
-- Credit management and user account control
-- Activity monitoring and audit trails
+- **Advanced credit management system:**
+  - Check user credits balance by Telegram ID
+  - Grant credits with custom reason/comment (production only)
+  - Automatic user notifications with admin comments
+  - Complete audit logging and transaction records
+  - Environment-aware security (local vs production)
+- Activity monitoring and comprehensive audit trails
+- Payment verification and manual credit recovery tools
 
 ## Error Handling and Resilience
 Comprehensive error handling with user-friendly messages, structured logging with rotation, graceful degradation for API failures, and async architecture for handling concurrent requests.

@@ -552,10 +552,12 @@ async def admin_process_credits_reason(message: Message, state: FSMContext):
         credits = data.get('credits')
         reason = message.text.strip() if message.text.strip() != '-' else ""
         
-        # Выдаем кредиты через безопасную систему
-        result = await grant_user_credits(message.from_user.id, user_id, credits, reason)
+        # Выдаем кредиты через безопасную систему с уведомлением пользователю
+        result = await grant_user_credits(message.from_user.id, user_id, credits, reason, message.bot)
         
         if result.get("success"):
+            notification_status = "✅ Отправлено" if result.get("notification_sent") else "⚠️ Не отправлено"
+            
             success_text = f"""
 ✅ <b>КРЕДИТЫ УСПЕШНО ВЫДАНЫ!</b>
 
@@ -565,6 +567,7 @@ async def admin_process_credits_reason(message: Message, state: FSMContext):
 💰 <b>Новый баланс:</b> {result['new_balance']}
 📝 <b>Причина:</b> {result['reason'] or 'Не указана'}
 🕐 <b>Время:</b> {result['timestamp'][:19]}
+📨 <b>Уведомление пользователю:</b> {notification_status}
 
 Операция записана в логи администратора.
             """
