@@ -43,4 +43,4 @@ class Config:
             raise ValueError("TELEGRAM_BOT_TOKEN environment variable is required")
         
         if not self.VEO_API_KEY:
-            raise ValueError("VEO_API_KEY environment variable is required")
+            print("⚠️ Warning: VEO_API_KEY not set - video generation will not work")

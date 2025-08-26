@@ -8,12 +8,8 @@ from database.models import User, Transaction, VideoGeneration, AdminLog, UserSt
 import time
 from functools import lru_cache
 
-# Try to import asyncpg for PostgreSQL, fallback to SQLite
-try:
-    import asyncpg
-    POSTGRES_AVAILABLE = True
-except ImportError:
-    POSTGRES_AVAILABLE = False
+# Disable PostgreSQL for Replit deployment to avoid pip issues
+POSTGRES_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 config = Config()
@@ -24,7 +20,7 @@ class Database:
     def __init__(self, database_url: Optional[str] = None, sqlite_path: Optional[str] = None):
         self.database_url = database_url or os.getenv('DATABASE_URL')
         self.sqlite_path = sqlite_path or "bot_database.db" 
-        self.use_postgres = POSTGRES_AVAILABLE and self.database_url is not None
+        self.use_postgres = False  # Force SQLite for Replit
         
         # Connection pool for PostgreSQL (performance optimization)
         self._postgres_pool = None
