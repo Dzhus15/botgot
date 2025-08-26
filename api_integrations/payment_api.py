@@ -42,7 +42,7 @@ class PaymentAPI:
                 "Idempotence-Key": str(uuid.uuid4())
             }
             
-            # Payment data
+            # Payment data with receipt (required by 54-FZ)
             payment_data = {
                 "amount": {
                     "value": f"{amount}.00",
@@ -50,7 +50,7 @@ class PaymentAPI:
                 },
                 "confirmation": {
                     "type": "redirect",
-                    "return_url": "https://t.me/your_bot"  # Replace with your bot link
+                    "return_url": "https://t.me/VideoAnalizAiBot"
                 },
                 "capture": True,
                 "description": description,
@@ -61,6 +61,22 @@ class PaymentAPI:
                 },
                 "payment_method_data": {
                     "type": "bank_card"
+                },
+                "receipt": {
+                    "customer": {
+                        "email": "customer@example.com"
+                    },
+                    "items": [
+                        {
+                            "description": description,
+                            "quantity": "1.00",
+                            "amount": {
+                                "value": f"{amount}.00",
+                                "currency": "RUB"
+                            },
+                            "vat_code": 1  # НДС не облагается
+                        }
+                    ]
                 }
             }
             
