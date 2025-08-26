@@ -14,6 +14,7 @@ This is a Telegram bot that generates AI videos using Google's Veo 3 API through
 - ✅ **NEW**: Secure admin credit management system with production-only restrictions
 - ✅ **NEW**: Automatic user notifications when admin grants credits with custom comments
 - ✅ **NEW**: Complete audit trail for all admin credit operations
+- ✅ **NEW**: Database migration tool for transferring data from development to production
 - ✅ **SECURITY**: Fixed all critical payment vulnerabilities - HMAC verification, rate limiting, race conditions
 - ✅ **SECURITY**: Enhanced Telegram Stars payment validation against fraud attempts
 - ✅ **SECURITY**: Strengthened webhook IP validation (removed localhost bypass)
@@ -72,6 +73,11 @@ Admin-only functionality includes:
   - Environment-aware security (local vs production)
 - Activity monitoring and comprehensive audit trails
 - Payment verification and manual credit recovery tools
+- **Database Migration Tools:**
+  - Automated data transfer from SQLite to PostgreSQL
+  - Complete backup and recovery system for data loss scenarios
+  - One-command migration: `bash migrate_data.sh`
+  - Safe data export/import with conflict resolution
 
 ## Error Handling and Resilience
 Comprehensive error handling with user-friendly messages, structured logging with rotation, graceful degradation for API failures, and async architecture for handling concurrent requests.
@@ -85,7 +91,9 @@ Comprehensive error handling with user-friendly messages, structured logging wit
 - **Telegram Payments API**: Telegram Stars integration
 
 ## Database
-- **SQLite**: Local persistent storage with async operations via aiosqlite
+- **SQLite**: Local persistent storage with async operations via aiosqlite (development)
+- **PostgreSQL**: Production database with automatic migration tools
+- **Migration System**: Universal tool for transferring data between environments
 
 ## Python Libraries
 - **aiogram**: Telegram bot framework with async support
