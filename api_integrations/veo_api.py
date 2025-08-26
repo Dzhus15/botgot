@@ -42,13 +42,13 @@ class VeoAPI:
                 "enableFallback": True,  # Enable fallback for higher success rates
             }
             
-            # Add callback URL if available (for production use)
-            repl_slug = os.getenv('REPL_SLUG')
-            repl_owner = os.getenv('REPL_OWNER')
-            if repl_slug and repl_owner:
-                callback_url = f"https://{repl_slug}.{repl_owner}.repl.co/webhook/veo-complete/{task_id}"
-                request_data["callBackUrl"] = callback_url
-                logger.info(f"Using callback URL: {callback_url}")
+            # Callback URL temporarily disabled due to port conflict
+            # repl_slug = os.getenv('REPL_SLUG')
+            # repl_owner = os.getenv('REPL_OWNER')
+            # if repl_slug and repl_owner:
+            #     callback_url = f"https://{repl_slug}.{repl_owner}.repl.co/webhook/veo-complete/{task_id}"
+            #     request_data["callBackUrl"] = callback_url
+            #     logger.info(f"Using callback URL: {callback_url}")
             
             # Handle image-to-video
             if generation_type == GenerationType.IMAGE_TO_VIDEO and image_file_id:
