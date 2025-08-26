@@ -17,13 +17,14 @@ config = Config()
 class PaymentStates(StatesGroup):
     waiting_custom_amount = State()
 
-# Credit packages
+# Credit packages - 1 рубль за 1 кредит
 CREDIT_PACKAGES = {
-    "package_50": {"credits": 50, "price_stars": 50, "price_rub": 100, "title": "50 кредитов"},
-    "package_100": {"credits": 100, "price_stars": 90, "price_rub": 180, "title": "100 кредитов", "popular": True},
-    "package_250": {"credits": 250, "price_stars": 200, "price_rub": 400, "title": "250 кредитов"},
-    "package_500": {"credits": 500, "price_stars": 350, "price_rub": 700, "title": "500 кредитов", "bonus": 50},
-    "package_1000": {"credits": 1000, "price_stars": 650, "price_rub": 1300, "title": "1000 кредитов", "bonus": 150},
+    "package_10": {"credits": 10, "price_stars": 10, "price_rub": 10, "title": "10 кредитов"},
+    "package_50": {"credits": 50, "price_stars": 50, "price_rub": 50, "title": "50 кредитов"},
+    "package_100": {"credits": 100, "price_stars": 90, "price_rub": 100, "title": "100 кредитов", "popular": True},
+    "package_250": {"credits": 250, "price_stars": 200, "price_rub": 250, "title": "250 кредитов"},
+    "package_500": {"credits": 500, "price_stars": 350, "price_rub": 500, "title": "500 кредитов", "bonus": 50},
+    "package_1000": {"credits": 1000, "price_stars": 650, "price_rub": 1000, "title": "1000 кредитов", "bonus": 150},
 }
 
 @router.callback_query(F.data == "buy_credits")
@@ -42,8 +43,8 @@ async def buy_credits_menu(callback: CallbackQuery):
 ⭐️ <b>Telegram Stars</b> - быстро и удобно
 💳 <b>Банковская карта/СБП</b> - через ЮКасса
 
-💡 <b>1 кредит = ~2₽</b>
-🎬 <b>1 видео = 10 кредитов</b>
+💡 <b>1 кредит = 1₽</b>
+🎬 <b>1 видео = 10 кредитов (10₽)</b>
     """
     
     await callback.message.edit_text(

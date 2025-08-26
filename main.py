@@ -10,7 +10,7 @@ from config import Config
 from database.database import init_database
 from handlers import start, generate, payments, admin
 from middlewares.rate_limit import RateLimitMiddleware
-# from webhook_server import start_webhook_server  # Temporarily disabled
+from webhook_server import start_webhook_server
 
 # Simple logging setup
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -47,8 +47,15 @@ async def main():
         
         logger.info("Bot starting polling...")
         
-        # Start polling (webhook server temporarily disabled due to port conflict)
-        await dp.start_polling(bot, skip_updates=True)
+        # Start webhook server in background
+        webhook_task = asyncio.create_task(start_webhook_server())
+        logger.info("Webhook server starting in background...")
+        
+        # Start polling
+        try:
+            await dp.start_polling(bot, skip_updates=True)
+        finally:
+            webhook_task.cancel()
         
     except Exception as e:
         logger.error(f"Error starting bot: {e}")

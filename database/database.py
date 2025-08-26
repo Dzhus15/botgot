@@ -180,6 +180,20 @@ class Database:
             logger.error(f"Error creating transaction: {e}")
             return False
     
+    async def payment_exists(self, payment_id: str) -> bool:
+        """Check if payment_id already exists in transactions"""
+        try:
+            async with self.get_connection() as db:
+                cursor = await db.execute(
+                    "SELECT COUNT(*) FROM transactions WHERE payment_id = ?",
+                    (payment_id,)
+                )
+                result = await cursor.fetchone()
+                return result[0] > 0 if result else False
+        except Exception as e:
+            logger.error(f"Error checking payment existence: {e}")
+            return False
+    
     # Video generation operations
     async def create_video_generation(self, generation: VideoGeneration) -> bool:
         """Create a new video generation record"""
