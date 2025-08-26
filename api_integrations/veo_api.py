@@ -60,6 +60,11 @@ class VeoAPI:
                     )
                     return False
             
+            # Log request details for debugging
+            logger.info(f"Sending API request for task {task_id}")
+            logger.info(f"URL: {self.base_url}/api/v1/veo/generate")
+            logger.info(f"Prompt: {prompt[:100]}...")
+            
             # Make API request
             async with aiohttp.ClientSession() as session:
                 async with session.post(
@@ -69,37 +74,45 @@ class VeoAPI:
                     timeout=aiohttp.ClientTimeout(total=30)
                 ) as response:
                     
+                    logger.info(f"API Response status: {response.status}")
+                    response_text = await response.text()
+                    logger.info(f"API Response: {response_text[:500]}...")
+                    
                     if response.status == 200:
-                        result = await response.json()
-                        
-                        if result.get("code") == 200:
-                            veo_task_id = result.get("data", {}).get("taskId")
-                            if veo_task_id:
-                                # Update database with Veo task ID
-                                await db.update_video_generation(task_id, "processing")
-                                
-                                # Start polling for completion
-                                asyncio.create_task(
-                                    self._poll_video_status(task_id, veo_task_id, user_id)
-                                )
-                                
-                                logger.info(f"Video generation started: {task_id} -> {veo_task_id}")
-                                return True
+                        try:
+                            result = await response.json()
+                            logger.info(f"Parsed response: {result}")
+                            
+                            if result.get("code") == 200:
+                                veo_task_id = result.get("data", {}).get("taskId")
+                                if veo_task_id:
+                                    # Update database with Veo task ID
+                                    await db.update_video_generation(task_id, "processing")
+                                    
+                                    # Start polling for completion
+                                    asyncio.create_task(
+                                        self._poll_video_status(task_id, veo_task_id, user_id)
+                                    )
+                                    
+                                    logger.info(f"Video generation started: {task_id} -> {veo_task_id}")
+                                    return True
+                                else:
+                                    logger.error(f"No task ID in response: {result}")
                             else:
-                                logger.error(f"No task ID in response: {result}")
-                        else:
-                            error_msg = result.get("msg", "Unknown API error")
-                            logger.error(f"API error for task {task_id}: {error_msg}")
-                            await db.update_video_generation(
-                                task_id, "failed", 
-                                error_message=error_msg
-                            )
+                                error_msg = result.get("msg", "Unknown API error")
+                                logger.error(f"API error for task {task_id}: {error_msg}")
+                                await db.update_video_generation(
+                                    task_id, "failed", 
+                                    error_message=error_msg
+                                )
+                        except Exception as json_error:
+                            logger.error(f"JSON parsing error: {json_error}")
+                            logger.error(f"Raw response: {response_text}")
                     else:
-                        error_text = await response.text()
-                        logger.error(f"HTTP error {response.status} for task {task_id}: {error_text}")
+                        logger.error(f"HTTP error {response.status} for task {task_id}: {response_text}")
                         await db.update_video_generation(
                             task_id, "failed", 
-                            error_message=f"HTTP {response.status}"
+                            error_message=f"HTTP {response.status}: {response_text[:100]}"
                         )
                         
         except asyncio.TimeoutError:
@@ -119,13 +132,6 @@ class VeoAPI:
     
     async def _upload_telegram_image(self, file_id: str) -> Optional[str]:
         """Upload Telegram image to public URL"""
-        # This is a simplified implementation
-        # In production, you would:
-        # 1. Use Bot.get_file() to get file path
-        # 2. Download the file
-        # 3. Upload to cloud storage (AWS S3, Google Cloud, etc.)
-        # 4. Return public URL
-        
         try:
             from aiogram import Bot
             bot = Bot(token=config.TELEGRAM_BOT_TOKEN)
@@ -136,15 +142,23 @@ class VeoAPI:
             # Download file
             file_data = await bot.download_file(file_path)
             
-            # In a real implementation, upload to cloud storage
-            # For now, return a placeholder URL
-            placeholder_url = f"https://example.com/images/{file_id}.jpg"
+            # Save to local storage temporarily (in production use cloud storage)
+            import os
+            os.makedirs("attached_assets/temp_images", exist_ok=True)
+            local_path = f"attached_assets/temp_images/{file_id}.jpg"
             
-            logger.info(f"Image uploaded: {file_id} -> {placeholder_url}")
-            return placeholder_url
+            with open(local_path, "wb") as f:
+                f.write(file_data.read())
+            
+            # For now return a placeholder - in production upload to cloud
+            # This needs proper implementation with cloud storage
+            public_url = f"https://api.replit.com/v2/get_file?path={local_path}"
+            
+            logger.info(f"Image processed: {file_id} -> {local_path}")
+            return public_url
             
         except Exception as e:
-            logger.error(f"Error uploading image {file_id}: {e}")
+            logger.error(f"Error processing image {file_id}: {e}")
             return None
     
     async def _poll_video_status(self, task_id: str, veo_task_id: str, user_id: int):
@@ -225,9 +239,10 @@ class VeoAPI:
     async def _notify_user_completion(self, user_id: int, video_url: str, task_id: str):
         """Notify user about video completion"""
         try:
+            logger.info(f"Notifying user {user_id} about completion: {task_id}")
+            
             from aiogram import Bot
             bot = Bot(token=config.TELEGRAM_BOT_TOKEN)
-            
             from keyboards.inline import get_main_menu_keyboard
             
             await bot.send_message(
@@ -252,9 +267,10 @@ class VeoAPI:
     async def _notify_user_failure(self, user_id: int, error_message: str):
         """Notify user about generation failure"""
         try:
+            logger.info(f"Notifying user {user_id} about failure: {error_message}")
+            
             from aiogram import Bot
             bot = Bot(token=config.TELEGRAM_BOT_TOKEN)
-            
             from keyboards.inline import get_main_menu_keyboard
             
             user_friendly_error = self._get_user_friendly_error(error_message)
