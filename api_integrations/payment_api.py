@@ -21,7 +21,8 @@ class PaymentAPI:
         amount: int, 
         description: str, 
         user_id: int,
-        package_id: str
+        package_id: str,
+        payment_method: str = "bank_card"
     ) -> Optional[str]:
         """Create YooKassa payment and return payment URL"""
         
@@ -60,7 +61,7 @@ class PaymentAPI:
                     "source": "telegram_bot"
                 },
                 "payment_method_data": {
-                    "type": "bank_card"
+                    "type": payment_method
                 },
                 "receipt": {
                     "customer": {

@@ -72,9 +72,9 @@ async def pay_with_stars(callback: CallbackQuery):
 
 @router.callback_query(F.data == "pay_card")
 async def pay_with_card(callback: CallbackQuery):
-    """Show card/SBP payment options"""
+    """Show card payment options"""
     text = """
-💳 <b>Оплата картой или СБП</b>
+💳 <b>Оплата банковской картой</b>
 
 Выберите пакет кредитов:
 
@@ -84,6 +84,25 @@ async def pay_with_card(callback: CallbackQuery):
     await callback.message.edit_text(
         text,
         reply_markup=get_credit_packages_keyboard("card")
+    )
+    await callback.answer()
+
+@router.callback_query(F.data == "pay_sbp")
+async def pay_with_sbp(callback: CallbackQuery):
+    """Show SBP payment options"""
+    text = """
+🏦 <b>Оплата через СБП</b>
+
+<b>Система быстрых платежей</b> - мгновенные переводы между банками России 24/7
+
+Выберите пакет кредитов:
+
+💎 <b>Популярные пакеты:</b>
+    """
+    
+    await callback.message.edit_text(
+        text,
+        reply_markup=get_credit_packages_keyboard("sbp")
     )
     await callback.answer()
 
@@ -141,7 +160,8 @@ async def process_card_payment(callback: CallbackQuery):
         amount=package['price_rub'],
         description=description,
         user_id=callback.from_user.id,
-        package_id=package_id
+        package_id=package_id,
+        payment_method="bank_card"
     )
     
     if payment_url:
@@ -152,9 +172,57 @@ async def process_card_payment(callback: CallbackQuery):
         ])
         
         await callback.message.edit_text(
-            f"💳 <b>Оплата банковской картой или СБП</b>\n\n"
+            f"💳 <b>Оплата банковской картой</b>\n\n"
             f"📦 <b>Пакет:</b> {package['title']}\n"
             f"💰 <b>Стоимость:</b> {package['price_rub']} ₽\n\n"
+            f"Нажмите кнопку ниже для перехода к оплате:",
+            reply_markup=keyboard
+        )
+    else:
+        await callback.message.edit_text(
+            "❌ Ошибка создания платежа. Попробуйте позже.",
+            reply_markup=get_back_to_menu_keyboard()
+        )
+    
+    await callback.answer()
+
+@router.callback_query(F.data.startswith("buy_sbp_"))
+async def process_sbp_payment(callback: CallbackQuery):
+    """Process SBP payment through YooKassa"""
+    package_id = callback.data.replace("buy_sbp_", "")
+    package = CREDIT_PACKAGES.get(package_id)
+    
+    if not package:
+        await callback.answer("❌ Неверный пакет")
+        return
+    
+    # Create payment through YooKassa with SBP method
+    payment_api = PaymentAPI()
+    
+    description = f"Покупка {package['credits']} кредитов"
+    if package.get('bonus'):
+        description += f" + {package['bonus']} бонусных кредитов"
+    
+    payment_url = await payment_api.create_yookassa_payment(
+        amount=package['price_rub'],
+        description=description,
+        user_id=callback.from_user.id,
+        package_id=package_id,
+        payment_method="sbp"
+    )
+    
+    if payment_url:
+        from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🏦 Оплатить через СБП", url=payment_url)],
+            [InlineKeyboardButton(text="🔙 Назад", callback_data="buy_credits")]
+        ])
+        
+        await callback.message.edit_text(
+            f"🏦 <b>Оплата через СБП</b>\n\n"
+            f"📦 <b>Пакет:</b> {package['title']}\n"
+            f"💰 <b>Стоимость:</b> {package['price_rub']} ₽\n\n"
+            f"<b>Система быстрых платежей</b> - мгновенные переводы 24/7\n"
             f"Нажмите кнопку ниже для перехода к оплате:",
             reply_markup=keyboard
         )

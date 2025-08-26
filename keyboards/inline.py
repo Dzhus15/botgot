@@ -22,7 +22,8 @@ def get_payment_menu_keyboard() -> InlineKeyboardMarkup:
     """Payment method selection keyboard"""
     keyboard = [
         [InlineKeyboardButton(text="⭐️ Telegram Stars", callback_data="pay_stars")],
-        [InlineKeyboardButton(text="💳 Банковская карта / СБП", callback_data="pay_card")],
+        [InlineKeyboardButton(text="💳 Банковская карта", callback_data="pay_card")],
+        [InlineKeyboardButton(text="🏦 СБП (Система быстрых платежей)", callback_data="pay_sbp")],
         [InlineKeyboardButton(text="🔙 Назад в меню", callback_data="main_menu")]
     ]
     return InlineKeyboardMarkup(inline_keyboard=keyboard)
