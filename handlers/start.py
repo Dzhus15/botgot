@@ -62,6 +62,7 @@ async def start_command(message: Message, state: FSMContext):
         
         await message.answer(
             welcome_text,
+            parse_mode="HTML",
             reply_markup=get_main_menu_keyboard()
         )
         
@@ -90,6 +91,7 @@ async def back_to_main_menu(callback: CallbackQuery, state: FSMContext):
     
     await callback.message.edit_text(
         welcome_text,
+        parse_mode="HTML",
         reply_markup=get_main_menu_keyboard()
     )
     await callback.answer()
@@ -126,6 +128,7 @@ https://t.me/CatiAiPromt
     from keyboards.inline import get_back_to_menu_keyboard
     await callback.message.edit_text(
         help_text,
+        parse_mode="HTML",
         reply_markup=get_back_to_menu_keyboard(),
         disable_web_page_preview=True
     )

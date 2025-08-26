@@ -330,6 +330,7 @@ class PaymentAPI:
             await bot.send_message(
                 chat_id=user_id,
                 text=success_text,
+                parse_mode="HTML",
                 reply_markup=get_main_menu_keyboard()
             )
             

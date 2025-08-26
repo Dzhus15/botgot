@@ -48,6 +48,7 @@ async def buy_credits_menu(callback: CallbackQuery):
     
     await callback.message.edit_text(
         text,
+        parse_mode="HTML",
         reply_markup=get_payment_menu_keyboard()
     )
     await callback.answer()
@@ -65,6 +66,7 @@ async def pay_with_stars(callback: CallbackQuery):
     
     await callback.message.edit_text(
         text,
+        parse_mode="HTML",
         reply_markup=get_credit_packages_keyboard("stars")
     )
     await callback.answer()
@@ -82,6 +84,7 @@ async def pay_with_card(callback: CallbackQuery):
     
     await callback.message.edit_text(
         text,
+        parse_mode="HTML",
         reply_markup=get_credit_packages_keyboard("card")
     )
     await callback.answer()
@@ -101,6 +104,7 @@ async def pay_with_sbp(callback: CallbackQuery):
     
     await callback.message.edit_text(
         text,
+        parse_mode="HTML",
         reply_markup=get_credit_packages_keyboard("sbp")
     )
     await callback.answer()
@@ -175,6 +179,7 @@ async def process_card_payment(callback: CallbackQuery):
             f"📦 <b>Пакет:</b> {package['title']}\n"
             f"💰 <b>Стоимость:</b> {package['price_rub']} ₽\n\n"
             f"Нажмите кнопку ниже для перехода к оплате:",
+            parse_mode="HTML",
             reply_markup=keyboard
         )
     else:
@@ -223,6 +228,7 @@ async def process_sbp_payment(callback: CallbackQuery):
             f"💰 <b>Стоимость:</b> {package['price_rub']} ₽\n\n"
             f"<b>Система быстрых платежей</b> - мгновенные переводы 24/7\n"
             f"Нажмите кнопку ниже для перехода к оплате:",
+            parse_mode="HTML",
             reply_markup=keyboard
         )
     else:
@@ -284,6 +290,7 @@ async def process_successful_payment(message: Message):
                 from keyboards.inline import get_main_menu_keyboard
                 await message.answer(
                     success_text,
+                    parse_mode="HTML",
                     reply_markup=get_main_menu_keyboard()
                 )
                 
