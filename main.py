@@ -10,6 +10,7 @@ from config import Config
 from database.database import init_database
 from handlers import start, generate, payments, admin
 from middlewares.rate_limit import RateLimitMiddleware
+from webhook_server import start_webhook_server
 
 # Simple logging setup
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -44,10 +45,14 @@ async def main():
         dp.include_router(payments.router)
         dp.include_router(admin.router)
         
-        logger.info("Bot starting polling...")
+        logger.info("Starting bot polling and webhook server...")
         
-        # Start polling
-        await dp.start_polling(bot, skip_updates=True)
+        # Create tasks for both bot polling and webhook server
+        bot_task = asyncio.create_task(dp.start_polling(bot, skip_updates=True))
+        webhook_task = asyncio.create_task(start_webhook_server())
+        
+        # Run both concurrently
+        await asyncio.gather(bot_task, webhook_task)
         
     except Exception as e:
         logger.error(f"Error starting bot: {e}")

@@ -1,6 +1,7 @@
 import aiohttp
 import asyncio
 import logging
+import os
 from typing import Optional
 from config import Config
 from database.database import db
@@ -23,7 +24,7 @@ class VeoAPI:
         prompt: str, 
         generation_type: GenerationType,
         user_id: int,
-        image_file_id: str = None
+        image_file_id: Optional[str] = None
     ) -> bool:
         """Generate video using Veo API"""
         
@@ -38,9 +39,16 @@ class VeoAPI:
                 "prompt": prompt,
                 "model": config.DEFAULT_MODEL,
                 "aspectRatio": config.DEFAULT_ASPECT_RATIO,
-                "enableFallback": True,  # Enable fallback for reliability
-                # "callBackUrl": f"https://your-domain.com/webhook/veo-complete/{task_id}"  # Optional for notifications
+                "enableFallback": True,  # Enable fallback for higher success rates
             }
+            
+            # Add callback URL if available (for production use)
+            repl_slug = os.getenv('REPL_SLUG')
+            repl_owner = os.getenv('REPL_OWNER')
+            if repl_slug and repl_owner:
+                callback_url = f"https://{repl_slug}.{repl_owner}.repl.co/webhook/veo-complete/{task_id}"
+                request_data["callBackUrl"] = callback_url
+                logger.info(f"Using callback URL: {callback_url}")
             
             # Handle image-to-video
             if generation_type == GenerationType.IMAGE_TO_VIDEO and image_file_id:
@@ -138,13 +146,19 @@ class VeoAPI:
             bot = Bot(token=config.TELEGRAM_BOT_TOKEN)
             
             file_info = await bot.get_file(file_id)
+            if not file_info.file_path:
+                logger.error(f"No file path for image {file_id}")
+                return None
+            
             file_path = file_info.file_path
             
             # Download file
             file_data = await bot.download_file(file_path)
+            if not file_data:
+                logger.error(f"Failed to download file data for {file_id}")
+                return None
             
             # Save to local storage temporarily (in production use cloud storage)
-            import os
             os.makedirs("attached_assets/temp_images", exist_ok=True)
             local_path = f"attached_assets/temp_images/{file_id}.jpg"
             
@@ -165,7 +179,7 @@ class VeoAPI:
     
     async def _poll_video_status(self, task_id: str, veo_task_id: str, user_id: int):
         """Poll video generation status with multiple endpoint attempts"""
-        max_attempts = 24  # 2 minutes with 5-second intervals (reasonable for testing)
+        max_attempts = 60  # 5 minutes with 5-second intervals (video generation takes time)
         attempt = 0
         
         logger.info(f"Starting polling for task {task_id} with Veo ID {veo_task_id}")
@@ -227,18 +241,18 @@ class VeoAPI:
             "Content-Type": "application/json"
         }
         
-        # Use the correct endpoint from kie.ai documentation
+        # Use the correct Veo API endpoints (not Runway API!)
         endpoints = [
-            f"{self.base_url}/api/v1/runway/record-detail",  # Primary endpoint for status
-            f"{self.base_url}/api/v1/veo/status/{veo_task_id}",  # Backup
-            f"{self.base_url}/api/v1/veo/result/{veo_task_id}",  # Backup
+            f"{self.base_url}/api/v1/veo/record-info",      # Primary Veo status endpoint (pattern from docs)
+            f"{self.base_url}/api/v1/veo/record-detail",    # Alternative Veo endpoint
+            f"{self.base_url}/api/v1/veo/status/{veo_task_id}",  # GET with task ID in path
         ]
         
         async with aiohttp.ClientSession() as session:
             for i, endpoint in enumerate(endpoints):
                 try:
-                    # For runway/record-detail endpoint, use POST with task_id in body
-                    if "runway/record-detail" in endpoint:
+                    # For veo record-info/record-detail endpoints, use POST with task_id in body
+                    if "record-info" in endpoint or "record-detail" in endpoint:
                         request_data = {"task_id": veo_task_id}
                         async with session.post(
                             endpoint,
@@ -252,7 +266,7 @@ class VeoAPI:
                                 result = await response.json()
                                 logger.info(f"Success response from {endpoint}: {result}")
                                 
-                                # Handle runway API response format
+                                # Handle Veo API response format
                                 if result.get("code") == 200 and result.get("data"):
                                     return result["data"]
                                 elif "data" in result:
