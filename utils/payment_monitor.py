@@ -34,15 +34,11 @@ class PaymentMonitor:
             
             logger.info(f"Checking recent payments from last {lookback_minutes} minutes")
             
-            # For demo purposes, you can manually add payment IDs here
-            # that were created recently but might not have been processed
-            recent_payment_ids = [
-                "303fb971-000f-5000-b000-1b4b050da81f",  # Newest payment
-                "303fb7c0-000f-5000-b000-13f5db7053a2",  # Latest successful payment
-                "303fb2ed-000f-5000-b000-16f05c69d90c",  # Your recent payment
-                "303fac32-000f-5001-9000-1951a1760f1a",  # Previous payment
-                "303fb0dc-000f-5000-b000-1399ed8e827e"   # Another payment
-            ]
+            # Get recent payment IDs from database instead of hardcoded list
+            from database.database import db
+            
+            # Get recent payment IDs that might need checking
+            recent_payment_ids = await self.get_recent_payment_ids_from_db(lookback_minutes)
             
             for payment_id in recent_payment_ids:
                 if payment_id not in self.processed_payments:
@@ -50,6 +46,31 @@ class PaymentMonitor:
                     
         except Exception as e:
             logger.error(f"Error checking recent payments: {e}")
+    
+    async def get_recent_payment_ids_from_db(self, lookback_minutes: int = 60) -> List[str]:
+        """Get recent payment IDs from database that might need verification"""
+        try:
+            from database.database import db
+            from datetime import datetime, timedelta
+            
+            # Get payment IDs from recent transactions that might not be completed
+            cutoff_time = datetime.now() - timedelta(minutes=lookback_minutes)
+            
+            async with db.get_connection() as conn:
+                cursor = await conn.execute("""
+                    SELECT DISTINCT payment_id FROM transactions 
+                    WHERE payment_id IS NOT NULL 
+                    AND created_at > ? 
+                    AND type = 'credit_purchase'
+                    AND payment_method = 'yookassa'
+                """, (cutoff_time.isoformat(),))
+                
+                rows = await cursor.fetchall()
+                return [row[0] for row in rows if row[0]]
+                
+        except Exception as e:
+            logger.error(f"Error getting recent payment IDs from DB: {e}")
+            return []
     
     async def check_and_process_payment(self, payment_id: str):
         """Check specific payment and process if successful"""
@@ -68,7 +89,7 @@ class PaymentMonitor:
                     package_id = metadata.get('package_id')
                     amount = result.get('amount')
                     
-                    if user_id and package_id:
+                    if user_id and package_id and amount:
                         logger.info(f"Processing untracked successful payment: {payment_id}")
                         
                         success = await self.payment_api._process_successful_card_payment(
