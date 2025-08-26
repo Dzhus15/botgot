@@ -56,7 +56,7 @@ async def handle_veo_callback(request):
         error_message = callback_data.get("error") or callback_data.get("message")
         
         # Get user ID from database using task_id
-        async with db.get_connection() as conn:
+        async with db.get_sqlite_connection() as conn:
             cursor = await conn.execute(
                 "SELECT user_id FROM video_generations WHERE task_id = ?",
                 (task_id,)

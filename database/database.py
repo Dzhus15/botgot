@@ -346,7 +346,7 @@ class Database:
             
     async def get_video_generation_by_veo_id(self, veo_task_id: str) -> Optional[VideoGeneration]:
         """Get video generation by Veo task ID"""
-        async with self.get_connection() as db:
+        async with self.get_sqlite_connection() as db:
             cursor = await db.execute(
                 "SELECT * FROM video_generations WHERE veo_task_id = ?",
                 (veo_task_id,)
@@ -374,7 +374,7 @@ class Database:
             
     async def get_processing_generations(self) -> List[VideoGeneration]:
         """Get all processing video generations that have veo_task_id"""
-        async with self.get_connection() as db:
+        async with self.get_sqlite_connection() as db:
             cursor = await db.execute('''
                 SELECT * FROM video_generations 
                 WHERE status = 'processing' AND veo_task_id IS NOT NULL
@@ -405,7 +405,7 @@ class Database:
     # Admin operations
     async def get_user_statistics(self) -> dict:
         """Get user statistics for admin"""
-        async with self.get_connection() as db:
+        async with self.get_sqlite_connection() as db:
             # Total users
             cursor = await db.execute("SELECT COUNT(*) FROM users")
             total_users = (await cursor.fetchone())[0]
@@ -434,7 +434,7 @@ class Database:
     
     async def get_all_user_ids(self) -> List[int]:
         """Get all user IDs for broadcasting"""
-        async with self.get_connection() as db:
+        async with self.get_sqlite_connection() as db:
             cursor = await db.execute("SELECT telegram_id FROM users WHERE status != 'banned'")
             rows = await cursor.fetchall()
             return [row[0] for row in rows]
