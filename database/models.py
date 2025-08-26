@@ -61,6 +61,7 @@ class VideoGeneration:
     id: Optional[int] = None
     user_id: Optional[int] = None
     task_id: str = ""
+    veo_task_id: Optional[str] = None  # API task ID from Veo
     prompt: str = ""
     generation_type: Optional[GenerationType] = None
     image_url: Optional[str] = None

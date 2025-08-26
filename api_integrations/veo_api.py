@@ -87,8 +87,8 @@ class VeoAPI:
                             if result.get("code") == 200:
                                 veo_task_id = result.get("data", {}).get("taskId")
                                 if veo_task_id:
-                                    # Update database with Veo task ID
-                                    await db.update_video_generation(task_id, "processing")
+                                    # Update database with Veo task ID and set processing status
+                                    await db.update_veo_task_id(task_id, veo_task_id)
                                     
                                     # Start polling for completion
                                     asyncio.create_task(

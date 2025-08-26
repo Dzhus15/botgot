@@ -56,6 +56,7 @@ class Database:
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     user_id INTEGER,
                     task_id TEXT UNIQUE,
+                    veo_task_id TEXT,
                     prompt TEXT NOT NULL,
                     generation_type TEXT NOT NULL,
                     image_url TEXT,
@@ -70,6 +71,15 @@ class Database:
                     FOREIGN KEY (user_id) REFERENCES users (telegram_id)
                 )
             ''')
+            
+            # Add veo_task_id column if it doesn't exist (migration)
+            try:
+                await db.execute('ALTER TABLE video_generations ADD COLUMN veo_task_id TEXT')
+                await db.commit()
+                logger.info("Added veo_task_id column to video_generations table")
+            except Exception:
+                # Column already exists
+                pass
             
             # Admin logs table
             await db.execute('''
@@ -177,11 +187,12 @@ class Database:
             async with self.get_connection() as db:
                 await db.execute('''
                     INSERT INTO video_generations 
-                    (user_id, task_id, prompt, generation_type, image_url, model, aspect_ratio, status, credits_spent, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    (user_id, task_id, veo_task_id, prompt, generation_type, image_url, model, aspect_ratio, status, credits_spent, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (
                     generation.user_id,
                     generation.task_id,
+                    generation.veo_task_id,
                     generation.prompt,
                     generation.generation_type.value,
                     generation.image_url,
@@ -212,6 +223,79 @@ class Database:
         except Exception as e:
             logger.error(f"Error updating video generation {task_id}: {e}")
             return False
+    
+    async def update_veo_task_id(self, task_id: str, veo_task_id: str) -> bool:
+        """Update the Veo API task ID for a generation"""
+        try:
+            async with self.get_connection() as db:
+                await db.execute('''
+                    UPDATE video_generations 
+                    SET veo_task_id = ?, status = 'processing'
+                    WHERE task_id = ?
+                ''', (veo_task_id, task_id))
+                await db.commit()
+                return True
+        except Exception as e:
+            logger.error(f"Error updating veo_task_id for {task_id}: {e}")
+            return False
+            
+    async def get_video_generation_by_veo_id(self, veo_task_id: str) -> Optional[VideoGeneration]:
+        """Get video generation by Veo task ID"""
+        async with self.get_connection() as db:
+            cursor = await db.execute(
+                "SELECT * FROM video_generations WHERE veo_task_id = ?",
+                (veo_task_id,)
+            )
+            row = await cursor.fetchone()
+            if row:
+                return VideoGeneration(
+                    id=row[0],
+                    user_id=row[1],
+                    task_id=row[2],
+                    veo_task_id=row[3],
+                    prompt=row[4],
+                    generation_type=GenerationType(row[5]),
+                    image_url=row[6],
+                    model=row[7],
+                    aspect_ratio=row[8],
+                    status=row[9],
+                    video_url=row[10],
+                    error_message=row[11],
+                    credits_spent=row[12],
+                    created_at=datetime.fromisoformat(row[13]) if row[13] else None,
+                    completed_at=datetime.fromisoformat(row[14]) if row[14] else None
+                )
+            return None
+            
+    async def get_processing_generations(self) -> List[VideoGeneration]:
+        """Get all processing video generations that have veo_task_id"""
+        async with self.get_connection() as db:
+            cursor = await db.execute('''
+                SELECT * FROM video_generations 
+                WHERE status = 'processing' AND veo_task_id IS NOT NULL
+            ''')
+            rows = await cursor.fetchall()
+            generations = []
+            for row in rows:
+                generation = VideoGeneration(
+                    id=row[0],
+                    user_id=row[1],
+                    task_id=row[2],
+                    veo_task_id=row[3],
+                    prompt=row[4],
+                    generation_type=GenerationType(row[5]),
+                    image_url=row[6],
+                    model=row[7],
+                    aspect_ratio=row[8],
+                    status=row[9],
+                    video_url=row[10],
+                    error_message=row[11],
+                    credits_spent=row[12],
+                    created_at=datetime.fromisoformat(row[13]) if row[13] else None,
+                    completed_at=datetime.fromisoformat(row[14]) if row[14] else None
+                )
+                generations.append(generation)
+            return generations
     
     # Admin operations
     async def get_user_statistics(self) -> dict:
