@@ -56,17 +56,32 @@ class PaymentMonitor:
             # Get payment IDs from recent transactions that might not be completed
             cutoff_time = datetime.now() - timedelta(minutes=lookback_minutes)
             
-            async with db.get_sqlite_connection() as conn:
-                cursor = await conn.execute("""
-                    SELECT DISTINCT payment_id FROM transactions 
-                    WHERE payment_id IS NOT NULL 
-                    AND created_at > ? 
-                    AND type = 'credit_purchase'
-                    AND payment_method = 'yookassa'
-                """, (cutoff_time.isoformat(),))
-                
-                rows = await cursor.fetchall()
-                return [row[0] for row in rows if row[0]]
+            if db.use_postgres:
+                conn = await db.get_postgres_connection()
+                try:
+                    rows = await conn.fetch("""
+                        SELECT DISTINCT payment_id FROM transactions 
+                        WHERE payment_id IS NOT NULL 
+                        AND created_at > $1 
+                        AND type = 'credit_purchase'
+                        AND payment_method = 'yookassa'
+                    """, cutoff_time)
+                    
+                    return [row[0] for row in rows if row[0]]
+                finally:
+                    await conn.close()
+            else:
+                async with db.get_sqlite_connection() as conn:
+                    cursor = await conn.execute("""
+                        SELECT DISTINCT payment_id FROM transactions 
+                        WHERE payment_id IS NOT NULL 
+                        AND created_at > ? 
+                        AND type = 'credit_purchase'
+                        AND payment_method = 'yookassa'
+                    """, (cutoff_time.isoformat(),))
+                    
+                    rows = await cursor.fetchall()
+                    return [row[0] for row in rows if row[0]]
                 
         except Exception as e:
             logger.error(f"Error getting recent payment IDs from DB: {e}")

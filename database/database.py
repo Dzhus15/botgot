@@ -267,8 +267,8 @@ class Database:
                         user.last_name,
                         user.credits,
                         user.status.value,
-                        user.created_at.isoformat(),
-                        user.updated_at.isoformat()
+                        (user.created_at or datetime.now()).isoformat(),
+                        (user.updated_at or datetime.now()).isoformat()
                     ))
                     await db.commit()
                     logger.info(f"Created user {user.telegram_id}")
@@ -317,7 +317,7 @@ class Database:
                         transaction.type.value,
                         transaction.amount,
                         transaction.description,
-                        transaction.payment_method.value if transaction.payment_method else None,
+                        transaction.payment_method.value if transaction.payment_method is not None else None,
                         transaction.payment_id,
                         transaction.created_at or datetime.now()
                     )
@@ -334,9 +334,9 @@ class Database:
                         transaction.type.value,
                         transaction.amount,
                         transaction.description,
-                        transaction.payment_method.value if transaction.payment_method else None,
+                        transaction.payment_method.value if transaction.payment_method is not None else None,
                         transaction.payment_id,
-                        transaction.created_at.isoformat()
+                        (transaction.created_at or datetime.now()).isoformat()
                     ))
                     await db.commit()
                     return True
@@ -385,7 +385,7 @@ class Database:
                         generation.task_id,
                         generation.veo_task_id,
                         generation.prompt,
-                        generation.generation_type.value,
+                        generation.generation_type.value if generation.generation_type is not None else 'text_to_video',
                         generation.image_url,
                         generation.model,
                         generation.aspect_ratio,
@@ -407,13 +407,13 @@ class Database:
                         generation.task_id,
                         generation.veo_task_id,
                         generation.prompt,
-                        generation.generation_type.value,
+                        generation.generation_type.value if generation.generation_type is not None else 'text_to_video',
                         generation.image_url,
                         generation.model,
                         generation.aspect_ratio,
                         generation.status,
                         generation.credits_spent,
-                        generation.created_at.isoformat()
+                        (generation.created_at or datetime.now()).isoformat()
                     ))
                     await db.commit()
                     return True
@@ -421,7 +421,7 @@ class Database:
             logger.error(f"Error creating video generation record: {e}")
             return False
     
-    async def update_video_generation(self, task_id: str, status: str, video_url: str = None, error_message: str = None) -> bool:
+    async def update_video_generation(self, task_id: str, status: str, video_url: Optional[str] = None, error_message: Optional[str] = None) -> bool:
         """Update video generation status"""
         try:
             if self.use_postgres:
@@ -536,87 +536,174 @@ class Database:
             
     async def get_processing_generations(self) -> List[VideoGeneration]:
         """Get all processing video generations that have veo_task_id"""
-        async with self.get_sqlite_connection() as db:
-            cursor = await db.execute('''
-                SELECT * FROM video_generations 
-                WHERE status = 'processing' AND veo_task_id IS NOT NULL
-            ''')
-            rows = await cursor.fetchall()
-            generations = []
-            for row in rows:
-                generation = VideoGeneration(
-                    id=row[0],
-                    user_id=row[1],
-                    task_id=row[2],
-                    veo_task_id=row[3],
-                    prompt=row[4],
-                    generation_type=GenerationType(row[5]),
-                    image_url=row[6],
-                    model=row[7],
-                    aspect_ratio=row[8],
-                    status=row[9],
-                    video_url=row[10],
-                    error_message=row[11],
-                    credits_spent=row[12],
-                    created_at=datetime.fromisoformat(row[13]) if row[13] else None,
-                    completed_at=datetime.fromisoformat(row[14]) if row[14] else None
-                )
-                generations.append(generation)
-            return generations
+        if self.use_postgres:
+            conn = await self.get_postgres_connection()
+            try:
+                rows = await conn.fetch('''
+                    SELECT * FROM video_generations 
+                    WHERE status = 'processing' AND veo_task_id IS NOT NULL
+                ''')
+                generations = []
+                for row in rows:
+                    generation = VideoGeneration(
+                        id=row[0],
+                        user_id=row[1],
+                        task_id=row[2],
+                        veo_task_id=row[3],
+                        prompt=row[4],
+                        generation_type=GenerationType(row[5]),
+                        image_url=row[6],
+                        model=row[7],
+                        aspect_ratio=row[8],
+                        status=row[9],
+                        video_url=row[10],
+                        error_message=row[11],
+                        credits_spent=row[12],
+                        created_at=row[13],
+                        completed_at=row[14]
+                    )
+                    generations.append(generation)
+                return generations
+            finally:
+                await conn.close()
+        else:
+            async with self.get_sqlite_connection() as db:
+                cursor = await db.execute('''
+                    SELECT * FROM video_generations 
+                    WHERE status = 'processing' AND veo_task_id IS NOT NULL
+                ''')
+                rows = await cursor.fetchall()
+                generations = []
+                for row in rows:
+                    generation = VideoGeneration(
+                        id=row[0],
+                        user_id=row[1],
+                        task_id=row[2],
+                        veo_task_id=row[3],
+                        prompt=row[4],
+                        generation_type=GenerationType(row[5]),
+                        image_url=row[6],
+                        model=row[7],
+                        aspect_ratio=row[8],
+                        status=row[9],
+                        video_url=row[10],
+                        error_message=row[11],
+                        credits_spent=row[12],
+                        created_at=datetime.fromisoformat(row[13]) if row[13] else None,
+                        completed_at=datetime.fromisoformat(row[14]) if row[14] else None
+                    )
+                    generations.append(generation)
+                return generations
     
     # Admin operations
     async def get_user_statistics(self) -> dict:
         """Get user statistics for admin"""
-        async with self.get_sqlite_connection() as db:
-            # Total users
-            cursor = await db.execute("SELECT COUNT(*) FROM users")
-            total_users = (await cursor.fetchone())[0]
-            
-            # Active users (generated video in last 30 days)
-            cursor = await db.execute('''
-                SELECT COUNT(DISTINCT user_id) FROM video_generations 
-                WHERE created_at >= datetime('now', '-30 days')
-            ''')
-            active_users = (await cursor.fetchone())[0]
-            
-            # Total credits in system
-            cursor = await db.execute("SELECT SUM(credits) FROM users")
-            total_credits = (await cursor.fetchone())[0] or 0
-            
-            # Total videos generated
-            cursor = await db.execute("SELECT COUNT(*) FROM video_generations WHERE status = 'completed'")
-            total_videos = (await cursor.fetchone())[0]
-            
-            return {
-                'total_users': total_users,
-                'active_users': active_users,
-                'total_credits': total_credits,
-                'total_videos': total_videos
-            }
+        if self.use_postgres:
+            conn = await self.get_postgres_connection()
+            try:
+                # Total users
+                total_users = await conn.fetchval("SELECT COUNT(*) FROM users")
+                
+                # Active users (generated video in last 30 days)
+                active_users = await conn.fetchval('''
+                    SELECT COUNT(DISTINCT user_id) FROM video_generations 
+                    WHERE created_at >= NOW() - INTERVAL '30 days'
+                ''')
+                
+                # Total credits in system
+                total_credits = await conn.fetchval("SELECT SUM(credits) FROM users") or 0
+                
+                # Total videos generated
+                total_videos = await conn.fetchval("SELECT COUNT(*) FROM video_generations WHERE status = 'completed'")
+                
+                return {
+                    'total_users': total_users or 0,
+                    'active_users': active_users or 0,
+                    'total_credits': total_credits or 0,
+                    'total_videos': total_videos or 0
+                }
+            finally:
+                await conn.close()
+        else:
+            async with self.get_sqlite_connection() as db:
+                # Total users
+                cursor = await db.execute("SELECT COUNT(*) FROM users")
+                result = await cursor.fetchone()
+                total_users = result[0] if result else 0
+                
+                # Active users (generated video in last 30 days)
+                cursor = await db.execute('''
+                    SELECT COUNT(DISTINCT user_id) FROM video_generations 
+                    WHERE created_at >= datetime('now', '-30 days')
+                ''')
+                result = await cursor.fetchone()
+                active_users = result[0] if result else 0
+                
+                # Total credits in system
+                cursor = await db.execute("SELECT SUM(credits) FROM users")
+                result = await cursor.fetchone()
+                total_credits = result[0] if result else 0
+                
+                # Total videos generated
+                cursor = await db.execute("SELECT COUNT(*) FROM video_generations WHERE status = 'completed'")
+                result = await cursor.fetchone()
+                total_videos = result[0] if result else 0
+                
+                return {
+                    'total_users': total_users,
+                    'active_users': active_users,
+                    'total_credits': total_credits,
+                    'total_videos': total_videos
+                }
     
     async def get_all_user_ids(self) -> List[int]:
         """Get all user IDs for broadcasting"""
-        async with self.get_sqlite_connection() as db:
-            cursor = await db.execute("SELECT telegram_id FROM users WHERE status != 'banned'")
-            rows = await cursor.fetchall()
-            return [row[0] for row in rows]
+        if self.use_postgres:
+            conn = await self.get_postgres_connection()
+            try:
+                rows = await conn.fetch("SELECT telegram_id FROM users WHERE status != 'banned'")
+                return [row[0] for row in rows]
+            finally:
+                await conn.close()
+        else:
+            async with self.get_sqlite_connection() as db:
+                cursor = await db.execute("SELECT telegram_id FROM users WHERE status != 'banned'")
+                rows = await cursor.fetchall()
+                return [row[0] for row in rows]
     
     async def log_admin_action(self, log: AdminLog) -> bool:
         """Log admin action"""
         try:
-            async with self.get_sqlite_connection() as db:
-                await db.execute('''
-                    INSERT INTO admin_logs (admin_id, action, target_user_id, description, created_at)
-                    VALUES (?, ?, ?, ?, ?)
-                ''', (
-                    log.admin_id,
-                    log.action,
-                    log.target_user_id,
-                    log.description,
-                    log.created_at.isoformat()
-                ))
-                await db.commit()
-                return True
+            if self.use_postgres:
+                conn = await self.get_postgres_connection()
+                try:
+                    await conn.execute('''
+                        INSERT INTO admin_logs (admin_id, action, target_user_id, description, created_at)
+                        VALUES ($1, $2, $3, $4, $5)
+                    ''', 
+                        log.admin_id,
+                        log.action,
+                        log.target_user_id,
+                        log.description,
+                        log.created_at or datetime.now()
+                    )
+                    return True
+                finally:
+                    await conn.close()
+            else:
+                async with self.get_sqlite_connection() as db:
+                    await db.execute('''
+                        INSERT INTO admin_logs (admin_id, action, target_user_id, description, created_at)
+                        VALUES (?, ?, ?, ?, ?)
+                    ''', (
+                        log.admin_id,
+                        log.action,
+                        log.target_user_id,
+                        log.description,
+                        (log.created_at or datetime.now()).isoformat()
+                    ))
+                    await db.commit()
+                    return True
         except Exception as e:
             logger.error(f"Error logging admin action: {e}")
             return False
