@@ -151,9 +151,10 @@ class VeoAPI:
             with open(local_path, "wb") as f:
                 f.write(file_data.read())
             
-            # For now return a placeholder - in production upload to cloud
-            # This needs proper implementation with cloud storage
-            public_url = f"https://api.replit.com/v2/get_file?path={local_path}"
+            # Use Replit's file serving for public access
+            # Remove 'attached_assets/' from path for URL
+            url_path = local_path.replace("attached_assets/", "")
+            public_url = f"https://{os.getenv('REPL_SLUG', 'default')}.{os.getenv('REPL_OWNER', 'user')}.repl.co/attached_assets/{url_path}"
             
             logger.info(f"Image processed: {file_id} -> {local_path}")
             return public_url
