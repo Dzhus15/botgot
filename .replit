@@ -5,10 +5,10 @@ integrations = ["python_database==1.0.0"]
 
 [nix]
 channel = "stable-25_05"
-packages = ["postgresql"]
+packages = ["postgresql", "u-root-cmds"]
 
 [workflows]
-runButton = "Project"
+runButton = "Start Telegram Bot"
 
 [[workflows.workflow]]
 name = "Project"
@@ -30,6 +30,15 @@ outputType = "webview"
 task = "shell.exec"
 args = "python -m pip install asyncpg && python main.py"
 waitForPort = 5000
+
+[[workflows.workflow]]
+name = "Start Telegram Bot"
+author = 46909179
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python main.py"
 
 [[ports]]
 localPort = 5000

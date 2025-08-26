@@ -12,11 +12,8 @@ from database.database import init_database
 from handlers import start, generate, payments, admin
 from middlewares.rate_limit import RateLimitMiddleware
 from webhook_server import init_webhook_server
-from utils.async_logger import setup_async_logging
-
-# Setup async logging for better performance
+# Setup basic logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-setup_async_logging()
 logger = logging.getLogger(__name__)
 
 async def start_bot_polling():
