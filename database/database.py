@@ -1,101 +1,192 @@
 import aiosqlite
 import logging
+import os
 from datetime import datetime
 from typing import Optional, List
 from config import Config
 from database.models import User, Transaction, VideoGeneration, AdminLog, UserStatus, TransactionType, PaymentMethod, GenerationType
 
+# Try to import asyncpg for PostgreSQL, fallback to SQLite
+try:
+    import asyncpg
+    POSTGRES_AVAILABLE = True
+except ImportError:
+    POSTGRES_AVAILABLE = False
+
 logger = logging.getLogger(__name__)
 config = Config()
 
 class Database:
-    """Database manager for SQLite operations"""
+    """Database manager for PostgreSQL and SQLite operations"""
     
-    def __init__(self, db_path: Optional[str] = None):
-        self.db_path = db_path or "bot_database.db"
+    def __init__(self, database_url: Optional[str] = None, sqlite_path: Optional[str] = None):
+        self.database_url = database_url or os.getenv('DATABASE_URL')
+        self.sqlite_path = sqlite_path or "bot_database.db" 
+        self.use_postgres = POSTGRES_AVAILABLE and self.database_url is not None
+        
+        if self.use_postgres:
+            logger.info("Using PostgreSQL database")
+        else:
+            logger.info("Using SQLite database as fallback")
     
-    def get_connection(self):
-        """Get database connection"""
-        return aiosqlite.connect(self.db_path)
+    async def get_postgres_connection(self):
+        """Get PostgreSQL connection"""
+        return await asyncpg.connect(self.database_url)
+    
+    def get_sqlite_connection(self):
+        """Get SQLite connection"""
+        return aiosqlite.connect(self.sqlite_path)
     
     async def create_tables(self):
         """Create all necessary tables"""
-        async with self.get_connection() as db:
-            # Users table
-            await db.execute('''
-                CREATE TABLE IF NOT EXISTS users (
-                    telegram_id INTEGER PRIMARY KEY,
-                    username TEXT,
-                    first_name TEXT,
-                    last_name TEXT,
-                    credits INTEGER DEFAULT 0,
-                    status TEXT DEFAULT 'regular',
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            ''')
-            
-            # Transactions table
-            await db.execute('''
-                CREATE TABLE IF NOT EXISTS transactions (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    user_id INTEGER,
-                    type TEXT NOT NULL,
-                    amount INTEGER NOT NULL,
-                    description TEXT,
-                    payment_method TEXT,
-                    payment_id TEXT,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (user_id) REFERENCES users (telegram_id)
-                )
-            ''')
-            
-            # Video generations table
-            await db.execute('''
-                CREATE TABLE IF NOT EXISTS video_generations (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    user_id INTEGER,
-                    task_id TEXT UNIQUE,
-                    veo_task_id TEXT,
-                    prompt TEXT NOT NULL,
-                    generation_type TEXT NOT NULL,
-                    image_url TEXT,
-                    model TEXT DEFAULT 'veo3_fast',
-                    aspect_ratio TEXT DEFAULT '16:9',
-                    status TEXT DEFAULT 'pending',
-                    video_url TEXT,
-                    error_message TEXT,
-                    credits_spent INTEGER DEFAULT 0,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    completed_at TIMESTAMP,
-                    FOREIGN KEY (user_id) REFERENCES users (telegram_id)
-                )
-            ''')
-            
-            # Add veo_task_id column if it doesn't exist (migration)
+        if self.use_postgres:
+            conn = await self.get_postgres_connection()
             try:
-                await db.execute('ALTER TABLE video_generations ADD COLUMN veo_task_id TEXT')
+                # Users table  
+                await conn.execute('''
+                    CREATE TABLE IF NOT EXISTS users (
+                        telegram_id BIGINT PRIMARY KEY,
+                        username TEXT,
+                        first_name TEXT,
+                        last_name TEXT,
+                        credits INTEGER DEFAULT 0,
+                        status TEXT DEFAULT 'regular',
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                ''')
+                
+                # Transactions table
+                await conn.execute('''
+                    CREATE TABLE IF NOT EXISTS transactions (
+                        id SERIAL PRIMARY KEY,
+                        user_id BIGINT,
+                        type TEXT NOT NULL,
+                        amount INTEGER NOT NULL,
+                        description TEXT,
+                        payment_method TEXT,
+                        payment_id TEXT,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (user_id) REFERENCES users (telegram_id)
+                    )
+                ''')
+                
+                # Video generations table
+                await conn.execute('''
+                    CREATE TABLE IF NOT EXISTS video_generations (
+                        id SERIAL PRIMARY KEY,
+                        user_id BIGINT,
+                        task_id TEXT UNIQUE,
+                        veo_task_id TEXT,
+                        prompt TEXT NOT NULL,
+                        generation_type TEXT NOT NULL,
+                        image_url TEXT,
+                        model TEXT DEFAULT 'veo3_fast',
+                        aspect_ratio TEXT DEFAULT '16:9',
+                        status TEXT DEFAULT 'pending',
+                        video_url TEXT,
+                        error_message TEXT,
+                        credits_spent INTEGER DEFAULT 0,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        completed_at TIMESTAMP,
+                        FOREIGN KEY (user_id) REFERENCES users (telegram_id)
+                    )
+                ''')
+                
+                # Admin logs table
+                await conn.execute('''
+                    CREATE TABLE IF NOT EXISTS admin_logs (
+                        id SERIAL PRIMARY KEY,
+                        admin_id BIGINT,
+                        action TEXT NOT NULL,
+                        target_user_id BIGINT,
+                        description TEXT,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (admin_id) REFERENCES users (telegram_id)
+                    )
+                ''')
+                
+                logger.info("Database tables created successfully (PostgreSQL)")
+            finally:
+                await conn.close()
+        else:
+            # SQLite version
+            async with self.get_sqlite_connection() as db:
+                # Users table
+                await db.execute('''
+                    CREATE TABLE IF NOT EXISTS users (
+                        telegram_id INTEGER PRIMARY KEY,
+                        username TEXT,
+                        first_name TEXT,
+                        last_name TEXT,
+                        credits INTEGER DEFAULT 0,
+                        status TEXT DEFAULT 'regular',
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                ''')
+                
+                # Transactions table
+                await db.execute('''
+                    CREATE TABLE IF NOT EXISTS transactions (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        user_id INTEGER,
+                        type TEXT NOT NULL,
+                        amount INTEGER NOT NULL,
+                        description TEXT,
+                        payment_method TEXT,
+                        payment_id TEXT,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (user_id) REFERENCES users (telegram_id)
+                    )
+                ''')
+                
+                # Video generations table
+                await db.execute('''
+                    CREATE TABLE IF NOT EXISTS video_generations (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        user_id INTEGER,
+                        task_id TEXT UNIQUE,
+                        veo_task_id TEXT,
+                        prompt TEXT NOT NULL,
+                        generation_type TEXT NOT NULL,
+                        image_url TEXT,
+                        model TEXT DEFAULT 'veo3_fast',
+                        aspect_ratio TEXT DEFAULT '16:9',
+                        status TEXT DEFAULT 'pending',
+                        video_url TEXT,
+                        error_message TEXT,
+                        credits_spent INTEGER DEFAULT 0,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        completed_at TIMESTAMP,
+                        FOREIGN KEY (user_id) REFERENCES users (telegram_id)
+                    )
+                ''')
+                
+                # Admin logs table
+                await db.execute('''
+                    CREATE TABLE IF NOT EXISTS admin_logs (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        admin_id INTEGER,
+                        action TEXT NOT NULL,
+                        target_user_id INTEGER,
+                        description TEXT,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (admin_id) REFERENCES users (telegram_id)
+                    )
+                ''')
+                
+                # Add veo_task_id column if it doesn't exist (migration)
+                try:
+                    await db.execute('ALTER TABLE video_generations ADD COLUMN veo_task_id TEXT')
+                    await db.commit()
+                    logger.info("Added veo_task_id column to video_generations table")
+                except Exception:
+                    # Column already exists
+                    pass
+                
                 await db.commit()
-                logger.info("Added veo_task_id column to video_generations table")
-            except Exception:
-                # Column already exists
-                pass
-            
-            # Admin logs table
-            await db.execute('''
-                CREATE TABLE IF NOT EXISTS admin_logs (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    admin_id INTEGER,
-                    action TEXT NOT NULL,
-                    target_user_id INTEGER,
-                    description TEXT,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (admin_id) REFERENCES users (telegram_id)
-                )
-            ''')
-            
-            await db.commit()
-            logger.info("Database tables created successfully")
+                logger.info("Database tables created successfully (SQLite)")
     
     # User operations
     async def get_user(self, telegram_id: int) -> Optional[User]:
