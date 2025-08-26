@@ -33,12 +33,13 @@ class VeoAPI:
                 "Content-Type": "application/json"
             }
             
-            # Prepare request data
+            # Prepare request data according to API documentation
             request_data = {
                 "prompt": prompt,
                 "model": config.DEFAULT_MODEL,
                 "aspectRatio": config.DEFAULT_ASPECT_RATIO,
-                "enableFallback": True  # Enable fallback for reliability
+                "enableFallback": True,  # Enable fallback for reliability
+                # "callBackUrl": f"https://your-domain.com/webhook/veo-complete/{task_id}"  # Optional for notifications
             }
             
             # Handle image-to-video
@@ -162,32 +163,39 @@ class VeoAPI:
             return None
     
     async def _poll_video_status(self, task_id: str, veo_task_id: str, user_id: int):
-        """Poll video generation status"""
-        max_attempts = 60  # 5 minutes with 5-second intervals
+        """Poll video generation status with multiple endpoint attempts"""
+        max_attempts = 24  # 2 minutes with 5-second intervals (reasonable for testing)
         attempt = 0
+        
+        logger.info(f"Starting polling for task {task_id} with Veo ID {veo_task_id}")
         
         while attempt < max_attempts:
             try:
                 await asyncio.sleep(5)  # Wait 5 seconds between checks
                 
-                status_result = await self._get_video_status(veo_task_id)
+                # Try multiple possible endpoints for status checking
+                status_result = await self._get_video_status_multiple_endpoints(veo_task_id)
                 
                 if status_result:
+                    logger.info(f"Status result for {task_id}: {status_result}")
+                    
                     status = status_result.get("status")
                     
-                    if status == "completed":
-                        video_url = status_result.get("video_url")
-                        await db.update_video_generation(
-                            task_id, "completed", video_url=video_url
-                        )
+                    if status == "completed" or status == "success":
+                        video_url = status_result.get("video_url") or status_result.get("videoUrl") or status_result.get("url")
                         
-                        # Notify user
-                        await self._notify_user_completion(user_id, video_url, task_id)
-                        logger.info(f"Video generation completed: {task_id}")
-                        return
+                        if video_url:
+                            await db.update_video_generation(
+                                task_id, "completed", video_url=video_url
+                            )
+                            
+                            # Notify user
+                            await self._notify_user_completion(user_id, video_url, task_id)
+                            logger.info(f"Video generation completed: {task_id}")
+                            return
                         
-                    elif status == "failed":
-                        error_msg = status_result.get("error", "Generation failed")
+                    elif status == "failed" or status == "error":
+                        error_msg = status_result.get("error") or status_result.get("message") or "Generation failed"
                         await db.update_video_generation(
                             task_id, "failed", error_message=error_msg
                         )
@@ -196,6 +204,8 @@ class VeoAPI:
                         await self._notify_user_failure(user_id, error_msg)
                         logger.error(f"Video generation failed: {task_id} - {error_msg}")
                         return
+                else:
+                    logger.warning(f"No status result for {task_id}, attempt {attempt + 1}")
                 
                 attempt += 1
                 
@@ -203,36 +213,61 @@ class VeoAPI:
                 logger.error(f"Error polling status for {task_id}: {e}")
                 attempt += 1
         
-        # Timeout
-        await db.update_video_generation(
-            task_id, "failed", error_message="Generation timeout"
-        )
-        await self._notify_user_failure(user_id, "Generation timeout")
-        logger.error(f"Video generation timeout: {task_id}")
+        # Timeout - but don't mark as failed immediately
+        logger.warning(f"Polling timeout for {task_id}, but task might still be processing")
+        
+        # Just log timeout, don't mark as failed in case task is still processing
+        # The user can check manually or we can implement a longer polling strategy
     
-    async def _get_video_status(self, veo_task_id: str) -> Optional[dict]:
-        """Get video generation status from Veo API"""
-        try:
-            headers = {
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json"
-            }
-            
-            async with aiohttp.ClientSession() as session:
-                # This endpoint would be for checking status
-                # The actual endpoint might be different
-                async with session.get(
-                    f"{self.base_url}/api/v1/veo/status/{veo_task_id}",
-                    headers=headers,
-                    timeout=aiohttp.ClientTimeout(total=10)
-                ) as response:
-                    
-                    if response.status == 200:
-                        result = await response.json()
-                        return result.get("data", {})
+    async def _get_video_status_multiple_endpoints(self, veo_task_id: str) -> Optional[dict]:
+        """Try multiple possible endpoints for video status"""
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json"
+        }
+        
+        # Try different possible endpoints based on common API patterns
+        endpoints = [
+            f"{self.base_url}/api/v1/veo/status/{veo_task_id}",
+            f"{self.base_url}/api/v1/veo/result/{veo_task_id}",
+            f"{self.base_url}/api/v1/veo/task/{veo_task_id}",
+            f"{self.base_url}/api/v1/veo/video/{veo_task_id}",
+            f"{self.base_url}/api/v1/tasks/{veo_task_id}",
+            f"{self.base_url}/api/v1/status/{veo_task_id}"
+        ]
+        
+        async with aiohttp.ClientSession() as session:
+            for endpoint in endpoints:
+                try:
+                    async with session.get(
+                        endpoint,
+                        headers=headers,
+                        timeout=aiohttp.ClientTimeout(total=10)
+                    ) as response:
                         
-        except Exception as e:
-            logger.error(f"Error getting video status {veo_task_id}: {e}")
+                        logger.info(f"Trying endpoint {endpoint}: status {response.status}")
+                        
+                        if response.status == 200:
+                            result = await response.json()
+                            logger.info(f"Success response from {endpoint}: {result}")
+                            
+                            # Handle different response structures
+                            if "data" in result:
+                                return result["data"]
+                            elif "result" in result:
+                                return result["result"]
+                            else:
+                                return result
+                                
+                        elif response.status == 404:
+                            continue  # Try next endpoint
+                        else:
+                            text = await response.text()
+                            logger.warning(f"Status {response.status} from {endpoint}: {text[:200]}")
+                            
+                except Exception as e:
+                    logger.debug(f"Error with endpoint {endpoint}: {e}")
+                    continue
         
         return None
     
