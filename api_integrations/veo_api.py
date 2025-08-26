@@ -227,45 +227,69 @@ class VeoAPI:
             "Content-Type": "application/json"
         }
         
-        # Try different possible endpoints based on common API patterns
+        # Use the correct endpoint from kie.ai documentation
         endpoints = [
-            f"{self.base_url}/api/v1/veo/status/{veo_task_id}",
-            f"{self.base_url}/api/v1/veo/result/{veo_task_id}",
-            f"{self.base_url}/api/v1/veo/task/{veo_task_id}",
-            f"{self.base_url}/api/v1/veo/video/{veo_task_id}",
-            f"{self.base_url}/api/v1/tasks/{veo_task_id}",
-            f"{self.base_url}/api/v1/status/{veo_task_id}"
+            f"{self.base_url}/api/v1/runway/record-detail",  # Primary endpoint for status
+            f"{self.base_url}/api/v1/veo/status/{veo_task_id}",  # Backup
+            f"{self.base_url}/api/v1/veo/result/{veo_task_id}",  # Backup
         ]
         
         async with aiohttp.ClientSession() as session:
-            for endpoint in endpoints:
+            for i, endpoint in enumerate(endpoints):
                 try:
-                    async with session.get(
-                        endpoint,
-                        headers=headers,
-                        timeout=aiohttp.ClientTimeout(total=10)
-                    ) as response:
-                        
-                        logger.info(f"Trying endpoint {endpoint}: status {response.status}")
-                        
-                        if response.status == 200:
-                            result = await response.json()
-                            logger.info(f"Success response from {endpoint}: {result}")
+                    # For runway/record-detail endpoint, use POST with task_id in body
+                    if "runway/record-detail" in endpoint:
+                        request_data = {"task_id": veo_task_id}
+                        async with session.post(
+                            endpoint,
+                            headers=headers,
+                            json=request_data,
+                            timeout=aiohttp.ClientTimeout(total=10)
+                        ) as response:
+                            logger.info(f"Trying POST {endpoint} with task_id: {veo_task_id}, status: {response.status}")
                             
-                            # Handle different response structures
-                            if "data" in result:
-                                return result["data"]
-                            elif "result" in result:
-                                return result["result"]
-                            else:
-                                return result
+                            if response.status == 200:
+                                result = await response.json()
+                                logger.info(f"Success response from {endpoint}: {result}")
                                 
-                        elif response.status == 404:
-                            continue  # Try next endpoint
-                        else:
-                            text = await response.text()
-                            logger.warning(f"Status {response.status} from {endpoint}: {text[:200]}")
+                                # Handle runway API response format
+                                if result.get("code") == 200 and result.get("data"):
+                                    return result["data"]
+                                elif "data" in result:
+                                    return result["data"]
+                                else:
+                                    return result
+                            else:
+                                text = await response.text()
+                                logger.warning(f"Status {response.status} from {endpoint}: {text[:200]}")
+                    else:
+                        # For other endpoints, use GET
+                        async with session.get(
+                            endpoint,
+                            headers=headers,
+                            timeout=aiohttp.ClientTimeout(total=10)
+                        ) as response:
+                        
+                            logger.info(f"Trying GET {endpoint}: status {response.status}")
                             
+                            if response.status == 200:
+                                result = await response.json()
+                                logger.info(f"Success response from {endpoint}: {result}")
+                                
+                                # Handle different response structures
+                                if "data" in result:
+                                    return result["data"]
+                                elif "result" in result:
+                                    return result["result"]
+                                else:
+                                    return result
+                                    
+                            elif response.status == 404:
+                                continue  # Try next endpoint
+                            else:
+                                text = await response.text()
+                                logger.warning(f"Status {response.status} from {endpoint}: {text[:200]}")
+                                
                 except Exception as e:
                     logger.debug(f"Error with endpoint {endpoint}: {e}")
                     continue
