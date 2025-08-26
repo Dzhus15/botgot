@@ -12,11 +12,12 @@ import json
 logger = get_logger(__name__)
 config = Config()
 
-# YooKassa official IP ranges for webhook security
+# YooKassa official IP ranges for webhook security (updated 2024)
 YOOKASSA_IP_RANGES = [
     '185.71.76.0/27',
     '185.71.77.0/27', 
     '77.75.153.0/25',
+    '77.75.154.0/25',  # Added - your webhook came from 77.75.154.206
     '77.75.156.11/32',
     '77.75.156.35/32',
     '2a02:5180:0:1509::/64',
