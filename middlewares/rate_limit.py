@@ -2,6 +2,7 @@ from aiogram import BaseMiddleware
 from aiogram.types import Message, CallbackQuery, TelegramObject
 from typing import Callable, Dict, Any, Awaitable, Union
 import time
+import asyncio
 
 from utils.rate_limiter import rate_limiter
 from utils.logger import get_logger

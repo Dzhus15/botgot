@@ -5,6 +5,8 @@ from datetime import datetime
 from typing import Optional, List
 from config import Config
 from database.models import User, Transaction, VideoGeneration, AdminLog, UserStatus, TransactionType, PaymentMethod, GenerationType
+import time
+from functools import lru_cache
 
 # Try to import asyncpg for PostgreSQL, fallback to SQLite
 try:
@@ -24,24 +26,49 @@ class Database:
         self.sqlite_path = sqlite_path or "bot_database.db" 
         self.use_postgres = POSTGRES_AVAILABLE and self.database_url is not None
         
+        # Connection pool for PostgreSQL (performance optimization)
+        self._postgres_pool = None
+        
+        # In-memory cache for frequent queries (performance optimization)
+        self._user_cache = {}
+        self._cache_ttl = 300  # 5 minutes cache TTL
+        
         if self.use_postgres:
-            logger.info("Using PostgreSQL database")
+            logger.info("Using PostgreSQL database with connection pooling")
         else:
             logger.info("Using SQLite database as fallback")
     
+    async def get_postgres_pool(self):
+        """Get or create PostgreSQL connection pool"""
+        if self._postgres_pool is None:
+            self._postgres_pool = await asyncpg.create_pool(
+                self.database_url,
+                min_size=2,
+                max_size=10,
+                command_timeout=30
+            )
+        return self._postgres_pool
+    
     async def get_postgres_connection(self):
-        """Get PostgreSQL connection"""
-        return await asyncpg.connect(self.database_url)
+        """Get PostgreSQL connection from pool"""
+        pool = await self.get_postgres_pool()
+        return pool
     
     def get_sqlite_connection(self):
         """Get SQLite connection"""
         return aiosqlite.connect(self.sqlite_path)
     
+    async def close_pool(self):
+        """Close PostgreSQL connection pool"""
+        if self._postgres_pool:
+            await self._postgres_pool.close()
+            self._postgres_pool = None
+    
     async def create_tables(self):
         """Create all necessary tables"""
         if self.use_postgres:
-            conn = await self.get_postgres_connection()
-            try:
+            pool = await self.get_postgres_pool()
+            async with pool.acquire() as conn:
                 # Users table  
                 await conn.execute('''
                     CREATE TABLE IF NOT EXISTS users (
@@ -106,9 +133,18 @@ class Database:
                     )
                 ''')
                 
-                logger.info("Database tables created successfully (PostgreSQL)")
-            finally:
-                await conn.close()
+                # Create performance indexes
+                await conn.execute('CREATE INDEX IF NOT EXISTS idx_users_telegram_id ON users(telegram_id)')
+                await conn.execute('CREATE INDEX IF NOT EXISTS idx_transactions_user_id ON transactions(user_id)')
+                await conn.execute('CREATE INDEX IF NOT EXISTS idx_transactions_payment_id ON transactions(payment_id)')
+                await conn.execute('CREATE INDEX IF NOT EXISTS idx_transactions_created_at ON transactions(created_at)')
+                await conn.execute('CREATE INDEX IF NOT EXISTS idx_video_generations_user_id ON video_generations(user_id)')
+                await conn.execute('CREATE INDEX IF NOT EXISTS idx_video_generations_task_id ON video_generations(task_id)')
+                await conn.execute('CREATE INDEX IF NOT EXISTS idx_video_generations_status ON video_generations(status)')
+                await conn.execute('CREATE INDEX IF NOT EXISTS idx_admin_logs_admin_id ON admin_logs(admin_id)')
+                await conn.execute('CREATE INDEX IF NOT EXISTS idx_admin_logs_target_user ON admin_logs(target_user_id)')
+                
+                logger.info("Database tables and indexes created successfully (PostgreSQL)")
         else:
             # SQLite version
             async with self.get_sqlite_connection() as db:
@@ -189,17 +225,44 @@ class Database:
                 logger.info("Database tables created successfully (SQLite)")
     
     # User operations
+    def _is_cache_valid(self, cache_time: float) -> bool:
+        """Check if cache entry is still valid"""
+        return time.time() - cache_time < self._cache_ttl
+    
+    def _cache_user(self, user: User):
+        """Cache user data"""
+        self._user_cache[user.telegram_id] = {
+            'user': user,
+            'time': time.time()
+        }
+    
+    def _get_cached_user(self, telegram_id: int) -> Optional[User]:
+        """Get user from cache if valid"""
+        if telegram_id in self._user_cache:
+            cache_entry = self._user_cache[telegram_id]
+            if self._is_cache_valid(cache_entry['time']):
+                return cache_entry['user']
+            else:
+                # Remove expired cache entry
+                del self._user_cache[telegram_id]
+        return None
+    
     async def get_user(self, telegram_id: int) -> Optional[User]:
-        """Get user by telegram ID"""
+        """Get user by telegram ID with caching"""
+        # Check cache first
+        cached_user = self._get_cached_user(telegram_id)
+        if cached_user:
+            return cached_user
+        
         if self.use_postgres:
-            conn = await self.get_postgres_connection()
-            try:
+            pool = await self.get_postgres_pool()
+            async with pool.acquire() as conn:
                 row = await conn.fetchrow(
                     "SELECT * FROM users WHERE telegram_id = $1",
                     telegram_id
                 )
                 if row:
-                    return User(
+                    user = User(
                         telegram_id=row[0],
                         username=row[1],
                         first_name=row[2],
@@ -209,9 +272,10 @@ class Database:
                         created_at=row[6],
                         updated_at=row[7]
                     )
+                    # Cache the user
+                    self._cache_user(user)
+                    return user
                 return None
-            finally:
-                await conn.close()
         else:
             async with self.get_sqlite_connection() as db:
                 cursor = await db.execute(

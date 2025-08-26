@@ -24,11 +24,12 @@ name = "Telegram Bot"
 author = "agent"
 
 [workflows.workflow.metadata]
-outputType = "console"
+outputType = "webview"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "python -m pip install asyncpg && python main.py"
+waitForPort = 5000
 
 [[ports]]
 localPort = 5000

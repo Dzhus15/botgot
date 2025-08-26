@@ -57,8 +57,8 @@ class PaymentMonitor:
             cutoff_time = datetime.now() - timedelta(minutes=lookback_minutes)
             
             if db.use_postgres:
-                conn = await db.get_postgres_connection()
-                try:
+                pool = await db.get_postgres_pool()
+                async with pool.acquire() as conn:
                     rows = await conn.fetch("""
                         SELECT DISTINCT payment_id FROM transactions 
                         WHERE payment_id IS NOT NULL 
@@ -68,8 +68,6 @@ class PaymentMonitor:
                     """, cutoff_time)
                     
                     return [row[0] for row in rows if row[0]]
-                finally:
-                    await conn.close()
             else:
                 async with db.get_sqlite_connection() as conn:
                     cursor = await conn.execute("""
