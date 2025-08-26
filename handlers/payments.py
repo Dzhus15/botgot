@@ -19,6 +19,7 @@ class PaymentStates(StatesGroup):
 
 # Credit packages - 1 рубль за 1 кредит
 CREDIT_PACKAGES = {
+    "test_package": {"credits": 1, "price_stars": 1, "price_rub": 1, "title": "🧪 ТЕСТ (1₽)", "test": True},
     "package_1": {"credits": 1, "price_stars": 79, "price_rub": 79, "title": "1 кредит"},
     "package_5": {"credits": 5, "price_stars": 399, "price_rub": 399, "title": "5 кредитов"},
     "package_10": {"credits": 10, "price_stars": 749, "price_rub": 749, "title": "10 кредитов", "popular": True},
