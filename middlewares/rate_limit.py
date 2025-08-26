@@ -25,6 +25,14 @@ class RateLimitMiddleware(BaseMiddleware):
         user_id = None
         if isinstance(event, Message):
             user_id = event.from_user.id if event.from_user else None
+            # Skip rate limiting for users in generation states (uploading images/prompts)
+            if hasattr(data.get('state'), 'get_state'):
+                try:
+                    current_state = await data['state'].get_state()
+                    if current_state and ('waiting_image' in current_state or 'waiting_text_prompt' in current_state):
+                        return await handler(event, data)
+                except:
+                    pass  # Continue with normal rate limiting if state check fails
         elif isinstance(event, CallbackQuery):
             user_id = event.from_user.id if event.from_user else None
             # Skip rate limiting for navigation callback queries

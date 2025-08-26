@@ -200,7 +200,10 @@ async def process_text_prompt(message: Message, state: FSMContext):
 @router.message(GenerationStates.waiting_image)
 async def process_image_upload(message: Message, state: FSMContext):
     """Process image for image-to-video generation"""
+    logger.info(f"Processing image upload from user {message.from_user.id}")
+    
     if not message.photo:
+        logger.warning(f"No photo in message from user {message.from_user.id}")
         await message.answer("❌ Пожалуйста, отправьте изображение.")
         return
     
@@ -224,6 +227,8 @@ async def process_image_upload(message: Message, state: FSMContext):
 @router.message(GenerationStates.waiting_image_prompt)
 async def process_image_prompt(message: Message, state: FSMContext):
     """Process prompt for image-to-video generation"""
+    logger.info(f"Processing image prompt from user {message.from_user.id}: {message.text[:50] if message.text else 'No text'}")
+    
     if not message.text:
         await message.answer("❌ Пожалуйста, отправьте текстовое описание.")
         return
