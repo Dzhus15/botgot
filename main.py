@@ -1,20 +1,65 @@
 import asyncio
 import logging
 import os
-from aiohttp import web
-from aiogram import Bot, Dispatcher
-from aiogram.client.default import DefaultBotProperties
-from aiogram.enums import ParseMode
-from aiogram.fsm.storage.memory import MemoryStorage
+import sys
 
-from config import Config
-from database.database import init_database
-from handlers import start, generate, payments, admin
-from middlewares.rate_limit import RateLimitMiddleware
-from webhook_server import init_webhook_server
-# Setup basic logging
+# Setup basic logging first
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+try:
+    from aiohttp import web
+    logger.info("✅ aiohttp imported successfully")
+except ImportError as e:
+    logger.error(f"❌ Failed to import aiohttp: {e}")
+    sys.exit(1)
+
+try:
+    from aiogram import Bot, Dispatcher
+    from aiogram.client.default import DefaultBotProperties
+    from aiogram.enums import ParseMode
+    from aiogram.fsm.storage.memory import MemoryStorage
+    logger.info("✅ aiogram imported successfully")
+except ImportError as e:
+    logger.error(f"❌ Failed to import aiogram: {e}")
+    sys.exit(1)
+
+try:
+    from config import Config
+    logger.info("✅ config imported successfully")
+except ImportError as e:
+    logger.error(f"❌ Failed to import config: {e}")
+    sys.exit(1)
+
+try:
+    from database.database import init_database
+    logger.info("✅ database imported successfully")
+except ImportError as e:
+    logger.error(f"❌ Failed to import database: {e}")
+    sys.exit(1)
+
+try:
+    from handlers import start, generate, payments, admin
+    logger.info("✅ handlers imported successfully")
+except ImportError as e:
+    logger.error(f"❌ Failed to import handlers: {e}")
+    sys.exit(1)
+
+try:
+    from middlewares.rate_limit import RateLimitMiddleware
+    logger.info("✅ middlewares imported successfully")
+except ImportError as e:
+    logger.error(f"❌ Failed to import middlewares: {e}")
+    sys.exit(1)
+
+try:
+    from webhook_server import init_webhook_server
+    logger.info("✅ webhook_server imported successfully")
+except ImportError as e:
+    logger.error(f"❌ Failed to import webhook_server: {e}")
+    sys.exit(1)
+
+logger.info("🚀 All imports completed successfully, starting bot...")
 
 async def start_bot_polling():
     """Start Telegram bot polling in background"""

@@ -8,7 +8,7 @@ channel = "stable-25_05"
 packages = ["postgresql", "u-root-cmds"]
 
 [workflows]
-runButton = "Start Telegram Bot"
+runButton = "Direct Bot Start"
 
 [[workflows.workflow]]
 name = "Project"
@@ -33,6 +33,15 @@ waitForPort = 5000
 
 [[workflows.workflow]]
 name = "Start Telegram Bot"
+author = 46909179
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python main.py"
+
+[[workflows.workflow]]
+name = "Direct Bot Start"
 author = 46909179
 mode = "sequential"
 
