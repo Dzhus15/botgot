@@ -191,7 +191,7 @@ class Database:
     # User operations
     async def get_user(self, telegram_id: int) -> Optional[User]:
         """Get user by telegram ID"""
-        async with self.get_connection() as db:
+        async with self.get_sqlite_connection() as db:
             cursor = await db.execute(
                 "SELECT * FROM users WHERE telegram_id = ?",
                 (telegram_id,)
@@ -213,7 +213,7 @@ class Database:
     async def create_user(self, user: User) -> bool:
         """Create a new user"""
         try:
-            async with self.get_connection() as db:
+            async with self.get_sqlite_connection() as db:
                 await db.execute('''
                     INSERT INTO users (telegram_id, username, first_name, last_name, credits, status, created_at, updated_at)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -237,7 +237,7 @@ class Database:
     async def update_user_credits(self, telegram_id: int, credits: int) -> bool:
         """Update user credits"""
         try:
-            async with self.get_connection() as db:
+            async with self.get_sqlite_connection() as db:
                 await db.execute(
                     "UPDATE users SET credits = ?, updated_at = ? WHERE telegram_id = ?",
                     (credits, datetime.now().isoformat(), telegram_id)
@@ -252,7 +252,7 @@ class Database:
     async def create_transaction(self, transaction: Transaction) -> bool:
         """Create a new transaction"""
         try:
-            async with self.get_connection() as db:
+            async with self.get_sqlite_connection() as db:
                 await db.execute('''
                     INSERT INTO transactions (user_id, type, amount, description, payment_method, payment_id, created_at)
                     VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -274,7 +274,7 @@ class Database:
     async def payment_exists(self, payment_id: str) -> bool:
         """Check if payment_id already exists in transactions"""
         try:
-            async with self.get_connection() as db:
+            async with self.get_sqlite_connection() as db:
                 cursor = await db.execute(
                     "SELECT COUNT(*) FROM transactions WHERE payment_id = ?",
                     (payment_id,)
@@ -289,7 +289,7 @@ class Database:
     async def create_video_generation(self, generation: VideoGeneration) -> bool:
         """Create a new video generation record"""
         try:
-            async with self.get_connection() as db:
+            async with self.get_sqlite_connection() as db:
                 await db.execute('''
                     INSERT INTO video_generations 
                     (user_id, task_id, veo_task_id, prompt, generation_type, image_url, model, aspect_ratio, status, credits_spent, created_at)
@@ -316,7 +316,7 @@ class Database:
     async def update_video_generation(self, task_id: str, status: str, video_url: str = None, error_message: str = None) -> bool:
         """Update video generation status"""
         try:
-            async with self.get_connection() as db:
+            async with self.get_sqlite_connection() as db:
                 completed_at = datetime.now().isoformat() if status in ['completed', 'failed'] else None
                 await db.execute('''
                     UPDATE video_generations 
@@ -332,7 +332,7 @@ class Database:
     async def update_veo_task_id(self, task_id: str, veo_task_id: str) -> bool:
         """Update the Veo API task ID for a generation"""
         try:
-            async with self.get_connection() as db:
+            async with self.get_sqlite_connection() as db:
                 await db.execute('''
                     UPDATE video_generations 
                     SET veo_task_id = ?, status = 'processing'
@@ -442,7 +442,7 @@ class Database:
     async def log_admin_action(self, log: AdminLog) -> bool:
         """Log admin action"""
         try:
-            async with self.get_connection() as db:
+            async with self.get_sqlite_connection() as db:
                 await db.execute('''
                     INSERT INTO admin_logs (admin_id, action, target_user_id, description, created_at)
                     VALUES (?, ?, ?, ?, ?)

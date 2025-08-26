@@ -19,10 +19,29 @@ async def add_credits_to_user(telegram_id: int, credits: int, description: str =
     # Получаем пользователя
     user = await db.get_user(telegram_id)
     if not user:
-        print(f"❌ Пользователь с ID {telegram_id} не найден")
-        return False
+        print(f"🤖 Пользователь с ID {telegram_id} не найден в базе данных")
+        print(f"📝 Создаю профиль пользователя...")
+        
+        # Создаем пользователя
+        from database.models import User, UserStatus
+        new_user = User(
+            telegram_id=telegram_id,
+            credits=0,
+            status=UserStatus.REGULAR,
+            first_name="Неизвестно",
+            username=None
+        )
+        
+        created = await db.create_user(new_user)
+        if not created:
+            print(f"❌ Ошибка при создании пользователя")
+            return False
+        
+        user = await db.get_user(telegram_id)
+        print(f"✅ Пользователь создан")
+    else:
+        print(f"👤 Найден пользователь: {user.first_name} (@{user.username})")
     
-    print(f"👤 Найден пользователь: {user.first_name} (@{user.username})")
     print(f"💰 Текущий баланс: {user.credits} кредитов")
     
     # Обновляем кредиты
