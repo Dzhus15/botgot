@@ -241,69 +241,92 @@ class VeoAPI:
             "Content-Type": "application/json"
         }
         
-        # Use the correct Veo API endpoints (not Runway API!)
-        endpoints = [
-            f"{self.base_url}/api/v1/veo/record-info",      # Primary Veo status endpoint (pattern from docs)
-            f"{self.base_url}/api/v1/veo/record-detail",    # Alternative Veo endpoint
-            f"{self.base_url}/api/v1/veo/status/{veo_task_id}",  # GET with task ID in path
-        ]
+        # Use the correct Veo API endpoint according to official docs
+        # The primary endpoint uses GET with taskId as query parameter
+        record_info_url = f"{self.base_url}/api/v1/veo/record-info?taskId={veo_task_id}"
         
         async with aiohttp.ClientSession() as session:
-            for i, endpoint in enumerate(endpoints):
-                try:
-                    # For veo record-info/record-detail endpoints, use POST with task_id in body
-                    if "record-info" in endpoint or "record-detail" in endpoint:
-                        request_data = {"task_id": veo_task_id}
-                        async with session.post(
-                            endpoint,
-                            headers=headers,
-                            json=request_data,
-                            timeout=aiohttp.ClientTimeout(total=10)
-                        ) as response:
-                            logger.info(f"Trying POST {endpoint} with task_id: {veo_task_id}, status: {response.status}")
-                            
-                            if response.status == 200:
-                                result = await response.json()
-                                logger.info(f"Success response from {endpoint}: {result}")
-                                
-                                # Handle Veo API response format
-                                if result.get("code") == 200 and result.get("data"):
-                                    return result["data"]
-                                elif "data" in result:
-                                    return result["data"]
-                                else:
-                                    return result
-                            else:
-                                text = await response.text()
-                                logger.warning(f"Status {response.status} from {endpoint}: {text[:200]}")
-                    else:
-                        # For other endpoints, use GET
-                        async with session.get(
-                            endpoint,
-                            headers=headers,
-                            timeout=aiohttp.ClientTimeout(total=10)
-                        ) as response:
+            try:
+                # Primary endpoint: GET with taskId as query parameter (official docs)
+                async with session.get(
+                    record_info_url,
+                    headers=headers,
+                    timeout=aiohttp.ClientTimeout(total=10)
+                ) as response:
+                    logger.info(f"Trying GET {record_info_url}, status: {response.status}")
+                    
+                    if response.status == 200:
+                        result = await response.json()
+                        logger.info(f"Success response from record-info: {result}")
                         
-                            logger.info(f"Trying GET {endpoint}: status {response.status}")
+                        # Handle official Veo API response format
+                        if result.get("code") == 200 and result.get("data"):
+                            data = result["data"]
+                            success_flag = data.get("successFlag")
                             
-                            if response.status == 200:
-                                result = await response.json()
-                                logger.info(f"Success response from {endpoint}: {result}")
+                            # Convert successFlag to standard status format
+                            if success_flag == 0:
+                                # Still processing
+                                return {"status": "processing"}
+                            elif success_flag == 1:
+                                # Success - extract video URLs from correct location
+                                response_data = data.get("response", {})
+                                result_urls = response_data.get("resultUrls", [])
                                 
-                                # Handle different response structures
-                                if "data" in result:
-                                    return result["data"]
-                                elif "result" in result:
-                                    return result["result"]
-                                else:
-                                    return result
+                                if result_urls:
+                                    # resultUrls is already an array
+                                    video_url = result_urls[0] if result_urls and len(result_urls) > 0 else None
                                     
-                            elif response.status == 404:
-                                continue  # Try next endpoint
-                            else:
-                                text = await response.text()
-                                logger.warning(f"Status {response.status} from {endpoint}: {text[:200]}")
+                                    if video_url:
+                                        return {"status": "completed", "video_url": video_url}
                                 
+                                logger.error(f"Success status but no video URLs found. Response: {data}")
+                            elif success_flag in [2, 3]:
+                                # Failed
+                                error_msg = data.get("errorMessage", "Video generation failed")
+                                return {"status": "failed", "error": error_msg}
+                    else:
+                        text = await response.text()
+                        logger.warning(f"Status {response.status} from record-info: {text[:200]}")
+                        
+            except Exception as e:
+                logger.error(f"Error checking status with official endpoint: {e}")
+                
+            # Fallback: try alternative endpoints if main one fails
+            fallback_endpoints = [
+                f"{self.base_url}/api/v1/veo/record-detail?taskId={veo_task_id}",  # Alternative with query param
+                f"{self.base_url}/api/v1/veo/status/{veo_task_id}",  # GET with task ID in path
+            ]
+            
+            for endpoint in fallback_endpoints:
+                try:
+                    # For other endpoints, use GET
+                    async with session.get(
+                        endpoint,
+                        headers=headers,
+                        timeout=aiohttp.ClientTimeout(total=10)
+                    ) as response:
+                        
+                        logger.info(f"Trying GET {endpoint}: status {response.status}")
+                        
+                        if response.status == 200:
+                            result = await response.json()
+                            logger.info(f"Success response from {endpoint}: {result}")
+                            
+                            # Handle different response structures
+                            if "data" in result:
+                                return result["data"]
+                            elif "result" in result:
+                                return result["result"]
+                            else:
+                                return result
+                                
+                        elif response.status == 404:
+                            continue  # Try next endpoint
+                        else:
+                            text = await response.text()
+                            logger.warning(f"Status {response.status} from {endpoint}: {text[:200]}")
+                            
                 except Exception as e:
                     logger.debug(f"Error with endpoint {endpoint}: {e}")
                     continue
