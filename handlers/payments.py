@@ -45,11 +45,12 @@ async def buy_credits_menu(callback: CallbackQuery):
 🎬 <b>1 видео = 10 кредитов (от 70₽)</b>
     """
     
-    await callback.message.edit_text(
-        text,
-        parse_mode="HTML",
-        reply_markup=get_payment_menu_keyboard()
-    )
+    if callback.message:
+        await callback.message.edit_text(
+            text,
+            parse_mode="HTML",
+            reply_markup=get_payment_menu_keyboard()
+        )
     await callback.answer()
 
 @router.callback_query(F.data == "pay_stars")
@@ -68,11 +69,12 @@ async def pay_with_stars(callback: CallbackQuery):
 Выберите пакет кредитов:
     """
     
-    await callback.message.edit_text(
-        text,
-        parse_mode="HTML",
-        reply_markup=get_credit_packages_keyboard("stars")
-    )
+    if callback.message:
+        await callback.message.edit_text(
+            text,
+            parse_mode="HTML",
+            reply_markup=get_credit_packages_keyboard("stars")
+        )
     await callback.answer()
 
 @router.callback_query(F.data == "pay_card")
@@ -91,11 +93,12 @@ async def pay_with_card(callback: CallbackQuery):
 Выберите пакет кредитов:
     """
     
-    await callback.message.edit_text(
-        text,
-        parse_mode="HTML",
-        reply_markup=get_credit_packages_keyboard("card")
-    )
+    if callback.message:
+        await callback.message.edit_text(
+            text,
+            parse_mode="HTML",
+            reply_markup=get_credit_packages_keyboard("card")
+        )
     await callback.answer()
 
 @router.callback_query(F.data == "pay_sbp")
@@ -116,11 +119,12 @@ async def pay_with_sbp(callback: CallbackQuery):
 Выберите пакет кредитов:
     """
     
-    await callback.message.edit_text(
-        text,
-        parse_mode="HTML",
-        reply_markup=get_credit_packages_keyboard("sbp")
-    )
+    if callback.message:
+        await callback.message.edit_text(
+            text,
+            parse_mode="HTML",
+            reply_markup=get_credit_packages_keyboard("sbp")
+        )
     await callback.answer()
 
 @router.callback_query(F.data.startswith("buy_stars_"))
@@ -143,14 +147,15 @@ async def process_stars_payment(callback: CallbackQuery):
     prices = [{"label": "XTR", "amount": package['price_stars']}]
     
     try:
-        await callback.message.answer_invoice(
-            title=title,
-            description=description,
-            payload=f"credits_{package_id}_{callback.from_user.id}",
-            provider_token="",  # Empty for Telegram Stars
-            currency="XTR",
-            prices=prices
-        )
+        if callback.message:
+            await callback.message.answer_invoice(
+                title=title,
+                description=description,
+                payload=f"credits_{package_id}_{callback.from_user.id}",
+                provider_token="",  # Empty for Telegram Stars
+                currency="XTR",
+                prices=[{"label": "XTR", "amount": package['price_stars']}]
+            )
         await callback.answer("✅ Счет создан!")
     except Exception as e:
         logger.error(f"Error creating Stars invoice: {e}")

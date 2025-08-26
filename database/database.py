@@ -191,45 +191,88 @@ class Database:
     # User operations
     async def get_user(self, telegram_id: int) -> Optional[User]:
         """Get user by telegram ID"""
-        async with self.get_sqlite_connection() as db:
-            cursor = await db.execute(
-                "SELECT * FROM users WHERE telegram_id = ?",
-                (telegram_id,)
-            )
-            row = await cursor.fetchone()
-            if row:
-                return User(
-                    telegram_id=row[0],
-                    username=row[1],
-                    first_name=row[2],
-                    last_name=row[3],
-                    credits=row[4],
-                    status=UserStatus(row[5]),
-                    created_at=datetime.fromisoformat(row[6]) if row[6] else None,
-                    updated_at=datetime.fromisoformat(row[7]) if row[7] else None
+        if self.use_postgres:
+            conn = await self.get_postgres_connection()
+            try:
+                row = await conn.fetchrow(
+                    "SELECT * FROM users WHERE telegram_id = $1",
+                    telegram_id
                 )
-            return None
+                if row:
+                    return User(
+                        telegram_id=row[0],
+                        username=row[1],
+                        first_name=row[2],
+                        last_name=row[3],
+                        credits=row[4],
+                        status=UserStatus(row[5]),
+                        created_at=row[6],
+                        updated_at=row[7]
+                    )
+                return None
+            finally:
+                await conn.close()
+        else:
+            async with self.get_sqlite_connection() as db:
+                cursor = await db.execute(
+                    "SELECT * FROM users WHERE telegram_id = ?",
+                    (telegram_id,)
+                )
+                row = await cursor.fetchone()
+                if row:
+                    return User(
+                        telegram_id=row[0],
+                        username=row[1],
+                        first_name=row[2],
+                        last_name=row[3],
+                        credits=row[4],
+                        status=UserStatus(row[5]),
+                        created_at=datetime.fromisoformat(row[6]) if row[6] else None,
+                        updated_at=datetime.fromisoformat(row[7]) if row[7] else None
+                    )
+                return None
     
     async def create_user(self, user: User) -> bool:
         """Create a new user"""
         try:
-            async with self.get_sqlite_connection() as db:
-                await db.execute('''
-                    INSERT INTO users (telegram_id, username, first_name, last_name, credits, status, created_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                ''', (
-                    user.telegram_id,
-                    user.username,
-                    user.first_name,
-                    user.last_name,
-                    user.credits,
-                    user.status.value,
-                    user.created_at.isoformat(),
-                    user.updated_at.isoformat()
-                ))
-                await db.commit()
-                logger.info(f"Created user {user.telegram_id}")
-                return True
+            if self.use_postgres:
+                conn = await self.get_postgres_connection()
+                try:
+                    await conn.execute('''
+                        INSERT INTO users (telegram_id, username, first_name, last_name, credits, status, created_at, updated_at)
+                        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                    ''', 
+                        user.telegram_id,
+                        user.username,
+                        user.first_name,
+                        user.last_name,
+                        user.credits,
+                        user.status.value,
+                        user.created_at or datetime.now(),
+                        user.updated_at or datetime.now()
+                    )
+                    logger.info(f"Created user {user.telegram_id}")
+                    return True
+                finally:
+                    await conn.close()
+            else:
+                async with self.get_sqlite_connection() as db:
+                    await db.execute('''
+                        INSERT INTO users (telegram_id, username, first_name, last_name, credits, status, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', (
+                        user.telegram_id,
+                        user.username,
+                        user.first_name,
+                        user.last_name,
+                        user.credits,
+                        user.status.value,
+                        user.created_at.isoformat(),
+                        user.updated_at.isoformat()
+                    ))
+                    await db.commit()
+                    logger.info(f"Created user {user.telegram_id}")
+                    return True
         except Exception as e:
             logger.error(f"Error creating user {user.telegram_id}: {e}")
             return False
@@ -237,13 +280,24 @@ class Database:
     async def update_user_credits(self, telegram_id: int, credits: int) -> bool:
         """Update user credits"""
         try:
-            async with self.get_sqlite_connection() as db:
-                await db.execute(
-                    "UPDATE users SET credits = ?, updated_at = ? WHERE telegram_id = ?",
-                    (credits, datetime.now().isoformat(), telegram_id)
-                )
-                await db.commit()
-                return True
+            if self.use_postgres:
+                conn = await self.get_postgres_connection()
+                try:
+                    await conn.execute(
+                        "UPDATE users SET credits = $1, updated_at = $2 WHERE telegram_id = $3",
+                        credits, datetime.now(), telegram_id
+                    )
+                    return True
+                finally:
+                    await conn.close()
+            else:
+                async with self.get_sqlite_connection() as db:
+                    await db.execute(
+                        "UPDATE users SET credits = ?, updated_at = ? WHERE telegram_id = ?",
+                        (credits, datetime.now().isoformat(), telegram_id)
+                    )
+                    await db.commit()
+                    return True
         except Exception as e:
             logger.error(f"Error updating credits for user {telegram_id}: {e}")
             return False
@@ -252,21 +306,40 @@ class Database:
     async def create_transaction(self, transaction: Transaction) -> bool:
         """Create a new transaction"""
         try:
-            async with self.get_sqlite_connection() as db:
-                await db.execute('''
-                    INSERT INTO transactions (user_id, type, amount, description, payment_method, payment_id, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                ''', (
-                    transaction.user_id,
-                    transaction.type.value,
-                    transaction.amount,
-                    transaction.description,
-                    transaction.payment_method.value if transaction.payment_method else None,
-                    transaction.payment_id,
-                    transaction.created_at.isoformat()
-                ))
-                await db.commit()
-                return True
+            if self.use_postgres:
+                conn = await self.get_postgres_connection()
+                try:
+                    await conn.execute('''
+                        INSERT INTO transactions (user_id, type, amount, description, payment_method, payment_id, created_at)
+                        VALUES ($1, $2, $3, $4, $5, $6, $7)
+                    ''', 
+                        transaction.user_id,
+                        transaction.type.value,
+                        transaction.amount,
+                        transaction.description,
+                        transaction.payment_method.value if transaction.payment_method else None,
+                        transaction.payment_id,
+                        transaction.created_at or datetime.now()
+                    )
+                    return True
+                finally:
+                    await conn.close()
+            else:
+                async with self.get_sqlite_connection() as db:
+                    await db.execute('''
+                        INSERT INTO transactions (user_id, type, amount, description, payment_method, payment_id, created_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                    ''', (
+                        transaction.user_id,
+                        transaction.type.value,
+                        transaction.amount,
+                        transaction.description,
+                        transaction.payment_method.value if transaction.payment_method else None,
+                        transaction.payment_id,
+                        transaction.created_at.isoformat()
+                    ))
+                    await db.commit()
+                    return True
         except Exception as e:
             logger.error(f"Error creating transaction: {e}")
             return False
@@ -274,13 +347,24 @@ class Database:
     async def payment_exists(self, payment_id: str) -> bool:
         """Check if payment_id already exists in transactions"""
         try:
-            async with self.get_sqlite_connection() as db:
-                cursor = await db.execute(
-                    "SELECT COUNT(*) FROM transactions WHERE payment_id = ?",
-                    (payment_id,)
-                )
-                result = await cursor.fetchone()
-                return result[0] > 0 if result else False
+            if self.use_postgres:
+                conn = await self.get_postgres_connection()
+                try:
+                    result = await conn.fetchval(
+                        "SELECT COUNT(*) FROM transactions WHERE payment_id = $1",
+                        payment_id
+                    )
+                    return result > 0 if result else False
+                finally:
+                    await conn.close()
+            else:
+                async with self.get_sqlite_connection() as db:
+                    cursor = await db.execute(
+                        "SELECT COUNT(*) FROM transactions WHERE payment_id = ?",
+                        (payment_id,)
+                    )
+                    result = await cursor.fetchone()
+                    return result[0] > 0 if result else False
         except Exception as e:
             logger.error(f"Error checking payment existence: {e}")
             return False
@@ -289,26 +373,50 @@ class Database:
     async def create_video_generation(self, generation: VideoGeneration) -> bool:
         """Create a new video generation record"""
         try:
-            async with self.get_sqlite_connection() as db:
-                await db.execute('''
-                    INSERT INTO video_generations 
-                    (user_id, task_id, veo_task_id, prompt, generation_type, image_url, model, aspect_ratio, status, credits_spent, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ''', (
-                    generation.user_id,
-                    generation.task_id,
-                    generation.veo_task_id,
-                    generation.prompt,
-                    generation.generation_type.value,
-                    generation.image_url,
-                    generation.model,
-                    generation.aspect_ratio,
-                    generation.status,
-                    generation.credits_spent,
-                    generation.created_at.isoformat()
-                ))
-                await db.commit()
-                return True
+            if self.use_postgres:
+                conn = await self.get_postgres_connection()
+                try:
+                    await conn.execute('''
+                        INSERT INTO video_generations 
+                        (user_id, task_id, veo_task_id, prompt, generation_type, image_url, model, aspect_ratio, status, credits_spent, created_at)
+                        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                    ''', 
+                        generation.user_id,
+                        generation.task_id,
+                        generation.veo_task_id,
+                        generation.prompt,
+                        generation.generation_type.value,
+                        generation.image_url,
+                        generation.model,
+                        generation.aspect_ratio,
+                        generation.status,
+                        generation.credits_spent,
+                        generation.created_at or datetime.now()
+                    )
+                    return True
+                finally:
+                    await conn.close()
+            else:
+                async with self.get_sqlite_connection() as db:
+                    await db.execute('''
+                        INSERT INTO video_generations 
+                        (user_id, task_id, veo_task_id, prompt, generation_type, image_url, model, aspect_ratio, status, credits_spent, created_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', (
+                        generation.user_id,
+                        generation.task_id,
+                        generation.veo_task_id,
+                        generation.prompt,
+                        generation.generation_type.value,
+                        generation.image_url,
+                        generation.model,
+                        generation.aspect_ratio,
+                        generation.status,
+                        generation.credits_spent,
+                        generation.created_at.isoformat()
+                    ))
+                    await db.commit()
+                    return True
         except Exception as e:
             logger.error(f"Error creating video generation record: {e}")
             return False
@@ -316,15 +424,28 @@ class Database:
     async def update_video_generation(self, task_id: str, status: str, video_url: str = None, error_message: str = None) -> bool:
         """Update video generation status"""
         try:
-            async with self.get_sqlite_connection() as db:
-                completed_at = datetime.now().isoformat() if status in ['completed', 'failed'] else None
-                await db.execute('''
-                    UPDATE video_generations 
-                    SET status = ?, video_url = ?, error_message = ?, completed_at = ?
-                    WHERE task_id = ?
-                ''', (status, video_url, error_message, completed_at, task_id))
-                await db.commit()
-                return True
+            if self.use_postgres:
+                conn = await self.get_postgres_connection()
+                try:
+                    completed_at = datetime.now() if status in ['completed', 'failed'] else None
+                    await conn.execute('''
+                        UPDATE video_generations 
+                        SET status = $1, video_url = $2, error_message = $3, completed_at = $4
+                        WHERE task_id = $5
+                    ''', status, video_url, error_message, completed_at, task_id)
+                    return True
+                finally:
+                    await conn.close()
+            else:
+                async with self.get_sqlite_connection() as db:
+                    completed_at = datetime.now().isoformat() if status in ['completed', 'failed'] else None
+                    await db.execute('''
+                        UPDATE video_generations 
+                        SET status = ?, video_url = ?, error_message = ?, completed_at = ?
+                        WHERE task_id = ?
+                    ''', (status, video_url, error_message, completed_at, task_id))
+                    await db.commit()
+                    return True
         except Exception as e:
             logger.error(f"Error updating video generation {task_id}: {e}")
             return False
@@ -332,45 +453,86 @@ class Database:
     async def update_veo_task_id(self, task_id: str, veo_task_id: str) -> bool:
         """Update the Veo API task ID for a generation"""
         try:
-            async with self.get_sqlite_connection() as db:
-                await db.execute('''
-                    UPDATE video_generations 
-                    SET veo_task_id = ?, status = 'processing'
-                    WHERE task_id = ?
-                ''', (veo_task_id, task_id))
-                await db.commit()
-                return True
+            if self.use_postgres:
+                conn = await self.get_postgres_connection()
+                try:
+                    await conn.execute('''
+                        UPDATE video_generations 
+                        SET veo_task_id = $1, status = 'processing'
+                        WHERE task_id = $2
+                    ''', veo_task_id, task_id)
+                    return True
+                finally:
+                    await conn.close()
+            else:
+                async with self.get_sqlite_connection() as db:
+                    await db.execute('''
+                        UPDATE video_generations 
+                        SET veo_task_id = ?, status = 'processing'
+                        WHERE task_id = ?
+                    ''', (veo_task_id, task_id))
+                    await db.commit()
+                    return True
         except Exception as e:
             logger.error(f"Error updating veo_task_id for {task_id}: {e}")
             return False
             
     async def get_video_generation_by_veo_id(self, veo_task_id: str) -> Optional[VideoGeneration]:
         """Get video generation by Veo task ID"""
-        async with self.get_sqlite_connection() as db:
-            cursor = await db.execute(
-                "SELECT * FROM video_generations WHERE veo_task_id = ?",
-                (veo_task_id,)
-            )
-            row = await cursor.fetchone()
-            if row:
-                return VideoGeneration(
-                    id=row[0],
-                    user_id=row[1],
-                    task_id=row[2],
-                    veo_task_id=row[3],
-                    prompt=row[4],
-                    generation_type=GenerationType(row[5]),
-                    image_url=row[6],
-                    model=row[7],
-                    aspect_ratio=row[8],
-                    status=row[9],
-                    video_url=row[10],
-                    error_message=row[11],
-                    credits_spent=row[12],
-                    created_at=datetime.fromisoformat(row[13]) if row[13] else None,
-                    completed_at=datetime.fromisoformat(row[14]) if row[14] else None
+        if self.use_postgres:
+            conn = await self.get_postgres_connection()
+            try:
+                row = await conn.fetchrow(
+                    "SELECT * FROM video_generations WHERE veo_task_id = $1",
+                    veo_task_id
                 )
-            return None
+                if row:
+                    return VideoGeneration(
+                        id=row[0],
+                        user_id=row[1],
+                        task_id=row[2],
+                        veo_task_id=row[3],
+                        prompt=row[4],
+                        generation_type=GenerationType(row[5]),
+                        image_url=row[6],
+                        model=row[7],
+                        aspect_ratio=row[8],
+                        status=row[9],
+                        video_url=row[10],
+                        error_message=row[11],
+                        credits_spent=row[12],
+                        created_at=row[13],
+                        completed_at=row[14]
+                    )
+                return None
+            finally:
+                await conn.close()
+        else:
+            async with self.get_sqlite_connection() as db:
+                cursor = await db.execute(
+                    "SELECT * FROM video_generations WHERE veo_task_id = ?",
+                    (veo_task_id,)
+                )
+                row = await cursor.fetchone()
+                if row:
+                    return VideoGeneration(
+                        id=row[0],
+                        user_id=row[1],
+                        task_id=row[2],
+                        veo_task_id=row[3],
+                        prompt=row[4],
+                        generation_type=GenerationType(row[5]),
+                        image_url=row[6],
+                        model=row[7],
+                        aspect_ratio=row[8],
+                        status=row[9],
+                        video_url=row[10],
+                        error_message=row[11],
+                        credits_spent=row[12],
+                        created_at=datetime.fromisoformat(row[13]) if row[13] else None,
+                        completed_at=datetime.fromisoformat(row[14]) if row[14] else None
+                    )
+                return None
             
     async def get_processing_generations(self) -> List[VideoGeneration]:
         """Get all processing video generations that have veo_task_id"""
