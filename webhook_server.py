@@ -117,13 +117,14 @@ async def handle_yookassa_webhook(request):
         client_ip = get_real_ip(request)
         logger.info(f"Received YooKassa webhook from IP: {client_ip}")
         
-        # Временно отключим IP-проверку для тестирования веб-хука
-        # if not is_yookassa_ip(client_ip):
-        #     logger.warning(f"Unauthorized webhook attempt from IP: {client_ip}")
-        #     return web.Response(text="Forbidden", status=403)
+        # Логируем все входящие запросы для отладки
+        logger.info(f"Webhook request from IP: {client_ip}")
+        logger.info(f"Request headers: {dict(request.headers)}")
         
-        # Пока разрешим все IP для тестирования
-        logger.info(f"Processing webhook from IP: {client_ip} (IP check temporarily disabled)")
+        # Проверяем IP только если это не локальный запрос
+        if client_ip not in ['127.0.0.1', '::1'] and not is_yookassa_ip(client_ip):
+            logger.warning(f"Unauthorized webhook attempt from IP: {client_ip}")
+            return web.Response(text="Forbidden", status=403)
         
         # Parse webhook data
         try:

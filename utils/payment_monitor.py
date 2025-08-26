@@ -16,7 +16,7 @@ class PaymentMonitor:
     def __init__(self):
         self.payment_api = PaymentAPI()
         self.processed_payments = set()  # Keep track of processed payment IDs
-        self.check_interval = 30  # Check every 30 seconds
+        self.check_interval = 15  # Check every 15 seconds for faster processing
         
     async def check_recent_payments(self, lookback_minutes: int = 60):
         """Check recent log entries for payment IDs and verify their status"""
@@ -37,6 +37,7 @@ class PaymentMonitor:
             # For demo purposes, you can manually add payment IDs here
             # that were created recently but might not have been processed
             recent_payment_ids = [
+                "303fb971-000f-5000-b000-1b4b050da81f",  # Newest payment
                 "303fb7c0-000f-5000-b000-13f5db7053a2",  # Latest successful payment
                 "303fb2ed-000f-5000-b000-16f05c69d90c",  # Your recent payment
                 "303fac32-000f-5001-9000-1951a1760f1a",  # Previous payment
