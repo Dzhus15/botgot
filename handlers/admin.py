@@ -17,6 +17,7 @@ config = Config()
 
 class AdminStates(StatesGroup):
     waiting_broadcast_message = State()
+    waiting_payment_id = State()
 
 async def is_admin(user_id: int) -> bool:
     """Check if user is admin"""
@@ -39,6 +40,7 @@ async def admin_command(message: Message, state: FSMContext):
 
 📊 <b>Статистика пользователей</b> - просмотр статистики
 📢 <b>Рассылка сообщений</b> - отправка сообщений всем пользователям
+🔍 <b>Проверка платежа</b> - проверить статус и начислить кредиты
 
 Выберите действие из меню ниже:
     """
@@ -254,6 +256,110 @@ async def admin_broadcast_confirm(callback: CallbackQuery, state: FSMContext):
     
     logger.info(f"Broadcast completed: {success_count}/{total_users} users")
     await callback.answer("✅ Рассылка завершена!")
+
+@router.callback_query(F.data == "admin_check_payment")
+async def admin_check_payment(callback: CallbackQuery, state: FSMContext):
+    """Check payment status manually"""
+    if not await is_admin(callback.from_user.id):
+        await callback.answer("❌ Нет доступа")
+        return
+    
+    await callback.message.edit_text(
+        "🔍 <b>Проверка платежа</b>\n\n"
+        "Введите ID платежа ЮКассы для проверки и начисления кредитов:\n\n"
+        "💡 ID платежа можно найти в логах бота или личном кабинете ЮКассы",
+        reply_markup=get_back_to_admin_keyboard()
+    )
+    await state.set_state(AdminStates.waiting_payment_id)
+    await callback.answer()
+
+@router.message(AdminStates.waiting_payment_id)
+async def process_payment_check(message: Message, state: FSMContext):
+    """Process payment ID and check status"""
+    if not await is_admin(message.from_user.id):
+        return
+    
+    payment_id = message.text.strip()
+    
+    if not payment_id:
+        await message.reply("❌ Введите корректный ID платежа")
+        return
+    
+    # Show progress message
+    progress_msg = await message.reply("🔍 Проверяю статус платежа...")
+    
+    try:
+        from api_integrations.payment_api import PaymentAPI
+        
+        payment_api = PaymentAPI()
+        result = await payment_api.verify_yookassa_payment(payment_id)
+        
+        if result.get("status") == "error":
+            await progress_msg.edit_text(f"❌ Ошибка проверки: {result.get('message')}")
+            await state.clear()
+            return
+        
+        status = result.get("status")
+        amount = result.get("amount")
+        currency = result.get("currency")
+        metadata = result.get("metadata", {})
+        is_paid = result.get("paid", False)
+        
+        user_id = metadata.get("user_id")
+        package_id = metadata.get("package_id")
+        
+        status_text = f"""
+🔍 <b>Результат проверки платежа</b>
+
+💳 <b>ID платежа:</b> {payment_id}
+💰 <b>Сумма:</b> {amount} {currency}
+📊 <b>Статус:</b> {status}
+✅ <b>Оплачен:</b> {'Да ✅' if is_paid else 'Нет ❌'}
+
+👤 <b>Пользователь:</b> {user_id or 'Не указан'}
+📦 <b>Пакет:</b> {package_id or 'Не указан'}
+        """
+        
+        if is_paid and user_id and package_id:
+            # Check if credits were already processed
+            payment_exists = await db.payment_exists(payment_id)
+            
+            if payment_exists:
+                status_text += "\n\n⚠️ Кредиты уже начислены ранее"
+            else:
+                # Process payment manually
+                await progress_msg.edit_text("💰 Начисляю кредиты...")
+                
+                success = await payment_api._process_successful_card_payment(
+                    user_id=int(user_id),
+                    package_id=package_id,
+                    payment_id=payment_id,
+                    amount=float(amount)
+                )
+                
+                if success:
+                    status_text += "\n\n✅ Кредиты успешно начислены!"
+                    
+                    # Log admin action
+                    admin_log = AdminLog(
+                        admin_id=message.from_user.id,
+                        action="manual_payment_processing",
+                        target_user_id=int(user_id),
+                        description=f"Manually processed payment {payment_id}"
+                    )
+                    await db.log_admin_action(admin_log)
+                else:
+                    status_text += "\n\n❌ Ошибка начисления кредитов"
+        elif is_paid:
+            status_text += "\n\n⚠️ Платеж успешен, но метаданные неполные"
+        
+        await progress_msg.edit_text(status_text)
+        
+    except Exception as e:
+        logger.error(f"Error checking payment {payment_id}: {e}")
+        await progress_msg.edit_text(f"❌ Ошибка проверки платежа: {e}")
+    
+    await state.clear()
 
 @router.callback_query(F.data == "admin_menu")
 async def back_to_admin_menu(callback: CallbackQuery, state: FSMContext):
