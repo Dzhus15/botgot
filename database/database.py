@@ -270,13 +270,11 @@ class Database:
             logger.error(f"Error logging admin action: {e}")
             return False
 
-# Global database instance will be initialized later
-db = None
+# Create database instance directly
+db = Database()
 
 async def init_database():
     """Initialize database with tables and admin user"""
-    global db
-    db = Database()
     await db.create_tables()
     
     # Create admin user if not exists

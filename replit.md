@@ -35,7 +35,7 @@ Integration with Veo 3 API through kie.ai platform supporting:
 
 ## Security and Rate Limiting
 - Environment variable configuration for all API keys and secrets
-- Rate limiting middleware (5 requests per minute per user)
+- Rate limiting middleware (5 requests per 30 seconds per user)
 - Input validation for prompts with content filtering
 - Parameterized database queries for SQL injection prevention
 - Comprehensive logging without sensitive data exposure
