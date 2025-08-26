@@ -265,61 +265,95 @@ async def process_pre_checkout_query(pre_checkout_query: PreCheckoutQuery):
 
 @router.message(F.successful_payment)
 async def process_successful_payment(message: Message):
-    """Process successful Telegram Stars payment"""
+    """Process successful Telegram Stars payment with enhanced validation"""
     payment = message.successful_payment
-    payload_parts = payment.invoice_payload.split('_')
     
-    if len(payload_parts) >= 3 and payload_parts[0] == "credits":
-        package_id = payload_parts[1]
-        user_id = int(payload_parts[2])
+    # SECURITY: Validate that payment is from the actual user who initiated it
+    actual_user_id = message.from_user.id
+    
+    # Parse and validate payload format
+    try:
+        payload_parts = payment.invoice_payload.split('_')
+        if len(payload_parts) < 3 or payload_parts[0] != "credits":
+            logger.error(f"Invalid payment payload format: {payment.invoice_payload}")
+            return
         
-        package = CREDIT_PACKAGES.get(package_id)
-        if package:
-            # Calculate total credits (including bonus)
-            total_credits = package['credits']
-            if package.get('bonus'):
-                total_credits += package['bonus']
-            
-            # Update user credits
-            user = await db.get_user(user_id)
-            if user:
-                new_credits = user.credits + total_credits
-                await db.update_user_credits(user_id, new_credits)
-                
-                # Create transaction record
-                transaction = Transaction(
-                    user_id=user_id,
-                    type=TransactionType.CREDIT_PURCHASE,
-                    amount=total_credits,
-                    description=f"Purchase via Telegram Stars: {package['title']}",
-                    payment_method=PaymentMethod.TELEGRAM_STARS,
-                    payment_id=payment.telegram_payment_charge_id
-                )
-                await db.create_transaction(transaction)
-                
-                success_text = f"""
+        package_id = payload_parts[1]
+        claimed_user_id = int(payload_parts[2])
+        
+        # SECURITY: Ensure user_id in payload matches actual payment sender
+        if claimed_user_id != actual_user_id:
+            logger.error(f"Payment fraud attempt: payload claims user {claimed_user_id} but payment from {actual_user_id}")
+            return
+        
+    except (ValueError, IndexError) as e:
+        logger.error(f"Error parsing payment payload: {e}")
+        return
+    
+    user_id = actual_user_id  # Use verified user ID
+    
+    # Validate package exists and payment amount matches
+    package = CREDIT_PACKAGES.get(package_id)
+    if not package:
+        logger.error(f"Invalid package_id in payment: {package_id}")
+        return
+    
+    # SECURITY: Verify payment amount matches expected package price
+    expected_amount = package['price_stars']
+    actual_amount = payment.total_amount
+    
+    if actual_amount != expected_amount:
+        logger.error(f"Payment amount mismatch: expected {expected_amount} XTR, got {actual_amount} XTR")
+        return
+    
+    # Check for duplicate payment processing
+    payment_id = payment.telegram_payment_charge_id
+    if await db.payment_exists(payment_id):
+        logger.warning(f"Duplicate Telegram Stars payment detected: {payment_id}")
+        return
+    
+    # Process the validated payment
+    # Calculate total credits (including bonus)
+    total_credits = package['credits']
+    if package.get('bonus'):
+        total_credits += package['bonus']
+    
+    # Update user credits
+    user = await db.get_user(user_id)
+    if user:
+        new_credits = user.credits + total_credits
+        await db.update_user_credits(user_id, new_credits)
+        
+        # Create transaction record
+        transaction = Transaction(
+            user_id=user_id,
+            type=TransactionType.CREDIT_PURCHASE,
+            amount=total_credits,
+            description=f"Purchase via Telegram Stars: {package['title']}",
+            payment_method=PaymentMethod.TELEGRAM_STARS,
+            payment_id=payment.telegram_payment_charge_id
+        )
+        await db.create_transaction(transaction)
+        
+        success_text = f"""
 ✅ <b>Платеж успешно завершен!</b>
 
 💰 <b>Добавлено кредитов:</b> {total_credits}
 💳 <b>Ваш баланс:</b> {new_credits} кредитов
 
 Теперь вы можете генерировать видео! 🎬
-                """
-                
-                from keyboards.inline import get_main_menu_keyboard
-                await message.answer(
-                    success_text,
-                    parse_mode="HTML",
-                    reply_markup=get_main_menu_keyboard()
-                )
-                
-                logger.info(f"Stars payment completed: user {user_id}, credits {total_credits}")
-            else:
-                logger.error(f"User {user_id} not found for payment processing")
-        else:
-            logger.error(f"Package {package_id} not found")
+        """
+        
+        from keyboards.inline import get_main_menu_keyboard
+        await message.answer(
+            success_text,
+            parse_mode="HTML",
+            reply_markup=get_main_menu_keyboard()
+        )
+        
+        logger.info(f"Stars payment completed: user {user_id}, credits {total_credits}")
     else:
-        logger.error(f"Invalid payment payload: {payment.invoice_payload}")
+        logger.error(f"User {user_id} not found for payment processing")
 
 # Webhook handler for YooKassa payments would be implemented here
 # This requires a separate web server endpoint

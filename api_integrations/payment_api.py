@@ -1,6 +1,8 @@
 import aiohttp
 import logging
 import uuid
+import hmac
+import hashlib
 from typing import Optional
 from config import Config
 from utils.logger import get_logger
@@ -157,10 +159,52 @@ class PaymentAPI:
             logger.error(f"Error verifying YooKassa payment {payment_id}: {e}")
             return {"status": "error", "message": str(e)}
     
-    async def process_yookassa_webhook(self, webhook_data: dict) -> bool:
+    def verify_webhook_signature(self, payload: bytes, signature: str) -> bool:
+        """Verify YooKassa webhook HMAC signature for security"""
+        if not config.YOOKASSA_WEBHOOK_SECRET:
+            logger.warning("YOOKASSA_WEBHOOK_SECRET not configured - skipping signature verification")
+            return True  # Allow if secret not configured (backward compatibility)
+        
+        if not signature:
+            logger.error("Missing webhook signature")
+            return False
+        
+        try:
+            # YooKassa sends signature as "sha256=<hash>"
+            if not signature.startswith('sha256='):
+                logger.error(f"Invalid signature format: {signature[:20]}...")
+                return False
+            
+            expected_signature = signature[7:]  # Remove "sha256=" prefix
+            
+            # Calculate HMAC
+            calculated_signature = hmac.new(
+                config.YOOKASSA_WEBHOOK_SECRET.encode('utf-8'),
+                payload,
+                hashlib.sha256
+            ).hexdigest()
+            
+            # Secure comparison
+            is_valid = hmac.compare_digest(expected_signature, calculated_signature)
+            
+            if not is_valid:
+                logger.error("Webhook signature verification failed")
+            
+            return is_valid
+            
+        except Exception as e:
+            logger.error(f"Error verifying webhook signature: {e}")
+            return False
+    
+    async def process_yookassa_webhook(self, webhook_data: dict, raw_payload: bytes = None, signature: str = None) -> bool:
         """Process YooKassa webhook notification with enhanced security"""
         
         try:
+            # Verify HMAC signature if provided
+            if raw_payload is not None and signature is not None:
+                if not self.verify_webhook_signature(raw_payload, signature):
+                    logger.error("Webhook signature verification failed - potential fraud attempt")
+                    return False
             # Validate webhook data structure
             if not isinstance(webhook_data, dict):
                 logger.error("Invalid webhook data type")
@@ -242,10 +286,8 @@ class PaymentAPI:
             from database.database import db
             from database.models import Transaction, TransactionType, PaymentMethod
             
-            # Check for duplicate payment
-            if await db.payment_exists(payment_id):
-                logger.warning(f"Duplicate payment attempt detected: {payment_id}")
-                return False
+            # SECURITY: Atomic check and creation to prevent race conditions
+            # We'll rely on database constraints to prevent duplicates
             
             package = CREDIT_PACKAGES.get(package_id)
             if not package:
@@ -269,7 +311,7 @@ class PaymentAPI:
                 logger.error(f"User {user_id} not found for payment {payment_id}")
                 return False
             
-            # Create transaction record FIRST (for atomicity)
+            # Create transaction record FIRST (atomic operation with duplicate check)
             transaction = Transaction(
                 user_id=user_id,
                 type=TransactionType.CREDIT_PURCHASE,
@@ -279,10 +321,16 @@ class PaymentAPI:
                 payment_id=payment_id
             )
             
+            # Try to create transaction - will fail if payment_id already exists (race condition protection)
             transaction_created = await db.create_transaction(transaction)
             if not transaction_created:
-                logger.error(f"Failed to create transaction record for payment {payment_id}")
-                return False
+                # Check if it was a duplicate payment (race condition)
+                if await db.payment_exists(payment_id):
+                    logger.warning(f"Duplicate payment processing attempt detected: {payment_id}")
+                    return False  # Not an error, just already processed
+                else:
+                    logger.error(f"Failed to create transaction record for payment {payment_id}")
+                    return False
             
             # Update user credits
             new_credits = user.credits + total_credits

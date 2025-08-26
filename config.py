@@ -16,6 +16,7 @@ class Config:
     # Payment Configuration
     YOOKASSA_API_KEY: str = os.getenv("YOOKASSA_API_KEY", "")
     YOOKASSA_SHOP_ID: str = os.getenv("YOOKASSA_SHOP_ID", "")
+    YOOKASSA_WEBHOOK_SECRET: str = os.getenv("YOOKASSA_WEBHOOK_SECRET", "")
     TELEGRAM_PAYMENTS_TOKEN: str = os.getenv("TELEGRAM_PAYMENTS_TOKEN", "")
     
     # Admin Configuration

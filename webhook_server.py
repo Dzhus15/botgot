@@ -1,6 +1,8 @@
 import asyncio
 import logging
 import ipaddress
+import time
+from collections import defaultdict
 from aiohttp import web, ClientSession
 from config import Config
 from database.database import db
@@ -11,6 +13,29 @@ import json
 
 logger = get_logger(__name__)
 config = Config()
+
+# Rate limiting for webhooks (simple in-memory implementation)
+WEBHOOK_RATE_LIMITS = defaultdict(list)  # {ip: [timestamp1, timestamp2, ...]}
+WEBHOOK_RATE_LIMIT_WINDOW = 60  # seconds
+WEBHOOK_RATE_LIMIT_MAX_REQUESTS = 10  # max requests per window
+
+def check_webhook_rate_limit(ip: str) -> bool:
+    """Check if IP is within webhook rate limits"""
+    now = time.time()
+    
+    # Clean old timestamps
+    WEBHOOK_RATE_LIMITS[ip] = [
+        ts for ts in WEBHOOK_RATE_LIMITS[ip] 
+        if now - ts < WEBHOOK_RATE_LIMIT_WINDOW
+    ]
+    
+    # Check if limit exceeded
+    if len(WEBHOOK_RATE_LIMITS[ip]) >= WEBHOOK_RATE_LIMIT_MAX_REQUESTS:
+        return False
+    
+    # Add current request
+    WEBHOOK_RATE_LIMITS[ip].append(now)
+    return True
 
 # YooKassa official IP ranges for webhook security (updated 2024)
 YOOKASSA_IP_RANGES = [
@@ -119,14 +144,23 @@ async def handle_yookassa_webhook(request):
         client_ip = get_real_ip(request)
         logger.info(f"Received YooKassa webhook from IP: {client_ip}")
         
+        # SECURITY: Check rate limiting first
+        if not check_webhook_rate_limit(client_ip):
+            logger.warning(f"Rate limit exceeded for webhook from IP: {client_ip}")
+            return web.Response(text="Rate limit exceeded", status=429)
+        
         # Логируем все входящие запросы для отладки
         logger.info(f"Webhook request from IP: {client_ip}")
         logger.info(f"Request headers: {dict(request.headers)}")
         
-        # Проверяем IP только если это не локальный запрос
-        if client_ip not in ['127.0.0.1', '::1'] and not is_yookassa_ip(client_ip):
+        # Проверяем IP для дополнительной безопасности (убрали обход для localhost)
+        if not is_yookassa_ip(client_ip):
             logger.warning(f"Unauthorized webhook attempt from IP: {client_ip}")
             return web.Response(text="Forbidden", status=403)
+        
+        # Get raw payload and signature for HMAC verification
+        raw_payload = await request.read()
+        signature = request.headers.get('X-Yookassa-Signature', '')
         
         # Parse webhook data
         try:
@@ -137,9 +171,9 @@ async def handle_yookassa_webhook(request):
         
         logger.info(f"Processing YooKassa webhook: {webhook_data.get('event', 'unknown')}")
         
-        # Process webhook using PaymentAPI
+        # Process webhook using PaymentAPI with HMAC verification
         payment_api = PaymentAPI()
-        success = await payment_api.process_yookassa_webhook(webhook_data)
+        success = await payment_api.process_yookassa_webhook(webhook_data, raw_payload, signature)
         
         if success:
             logger.info("YooKassa webhook processed successfully")

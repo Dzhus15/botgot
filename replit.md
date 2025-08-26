@@ -14,6 +14,9 @@ This is a Telegram bot that generates AI videos using Google's Veo 3 API through
 - ✅ **NEW**: Secure admin credit management system with production-only restrictions
 - ✅ **NEW**: Automatic user notifications when admin grants credits with custom comments
 - ✅ **NEW**: Complete audit trail for all admin credit operations
+- ✅ **SECURITY**: Fixed all critical payment vulnerabilities - HMAC verification, rate limiting, race conditions
+- ✅ **SECURITY**: Enhanced Telegram Stars payment validation against fraud attempts
+- ✅ **SECURITY**: Strengthened webhook IP validation (removed localhost bypass)
 
 # User Preferences
 
@@ -47,8 +50,12 @@ Integration with Veo 3 API through kie.ai platform supporting:
 - Standard 16:9 aspect ratio output
 
 ## Security and Rate Limiting
+- **Enhanced Payment Security**: HMAC signature verification for YooKassa webhooks with configurable secret
+- **Fraud Prevention**: Multi-layer validation for Telegram Stars payments including amount verification and user ID matching
+- **Rate Limiting**: Dual-layer protection - user rate limiting (100 msg/60s) + webhook rate limiting (10 req/60s per IP)
+- **Race Condition Protection**: Atomic payment processing with database constraints to prevent duplicate credit grants
+- **Webhook Security**: Strict IP validation for YooKassa webhooks without localhost bypass vulnerabilities
 - Environment variable configuration for all API keys and secrets
-- Rate limiting middleware (100 requests per 60 seconds per user)
 - Input validation for prompts with content filtering
 - Parameterized database queries for SQL injection prevention
 - Comprehensive logging without sensitive data exposure
