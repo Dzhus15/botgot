@@ -10,6 +10,7 @@ from database.models import AdminLog, UserStatus
 from keyboards.inline import get_admin_menu_keyboard, get_back_to_admin_keyboard
 from config import Config
 from utils.logger import get_logger
+from admin_tools.credit_management import check_user_credits, grant_user_credits, emergency_credit_restore
 
 logger = get_logger(__name__)
 router = Router()
@@ -19,6 +20,9 @@ class AdminStates(StatesGroup):
     waiting_broadcast_message = State()
     waiting_payment_id = State()
     waiting_user_id_for_notification = State()
+    waiting_user_id_for_credits = State()
+    waiting_credits_amount = State()
+    waiting_credits_reason = State()
 
 async def is_admin(user_id: int) -> bool:
     """Check if user is admin"""
@@ -40,6 +44,8 @@ async def admin_command(message: Message, state: FSMContext):
 Добро пожаловать в админ-панель! Выберите действие:
 
 📊 <b>Статистика пользователей</b> - просмотр статистики
+💰 <b>Проверить кредиты</b> - проверить баланс пользователя по ID
+💎 <b>Выдать кредиты</b> - начислить кредиты пользователю (только на production)
 📢 <b>Рассылка сообщений</b> - отправка сообщений всем пользователям
 🔍 <b>Проверка платежа</b> - проверить статус и начислить кредиты
 
@@ -382,3 +388,201 @@ async def back_to_admin_menu(callback: CallbackQuery, state: FSMContext):
         reply_markup=get_admin_menu_keyboard()
     )
     await callback.answer()
+
+# ======= НОВЫЕ ФУНКЦИИ УПРАВЛЕНИЯ КРЕДИТАМИ =======
+
+@router.callback_query(F.data == "admin_check_credits")
+async def admin_check_credits_start(callback: CallbackQuery, state: FSMContext):
+    """Start checking user credits"""
+    if not await is_admin(callback.from_user.id):
+        await callback.answer("❌ Нет доступа")
+        return
+    
+    text = """
+🔍 <b>Проверка кредитов пользователя</b>
+
+Введите ID пользователя (Telegram ID), чтобы проверить его баланс кредитов:
+
+<i>Пример: 123456789</i>
+    """
+    
+    await callback.message.edit_text(
+        text,
+        reply_markup=get_back_to_admin_keyboard()
+    )
+    await state.set_state(AdminStates.waiting_user_id_for_credits)
+    await state.update_data(action="check")
+    await callback.answer()
+
+@router.callback_query(F.data == "admin_grant_credits")
+async def admin_grant_credits_start(callback: CallbackQuery, state: FSMContext):
+    """Start granting credits to user"""
+    if not await is_admin(callback.from_user.id):
+        await callback.answer("❌ Нет доступа")
+        return
+    
+    # Проверяем environment
+    from admin_tools.credit_management import credit_manager
+    
+    if not credit_manager.is_production:
+        await callback.message.edit_text(
+            "⚠️ <b>Выдача кредитов заблокирована</b>\n\n"
+            "Эта функция работает только на production (после deploy).\n"
+            "Локальный запуск не позволяет выдавать кредиты для безопасности.",
+            reply_markup=get_back_to_admin_keyboard()
+        )
+        await callback.answer()
+        return
+    
+    text = """
+💎 <b>Выдача кредитов пользователю</b>
+
+⚠️ <b>ВНИМАНИЕ:</b> Выдача кредитов работает только на production!
+
+Введите ID пользователя (Telegram ID):
+
+<i>Пример: 123456789</i>
+    """
+    
+    await callback.message.edit_text(
+        text,
+        reply_markup=get_back_to_admin_keyboard()
+    )
+    await state.set_state(AdminStates.waiting_user_id_for_credits)
+    await state.update_data(action="grant")
+    await callback.answer()
+
+@router.message(AdminStates.waiting_user_id_for_credits)
+async def admin_process_user_id_for_action(message: Message, state: FSMContext):
+    """Process user ID for credit actions"""
+    if not await is_admin(message.from_user.id):
+        return
+    
+    try:
+        data = await state.get_data()
+        action = data.get('action', 'check')
+        user_id = int(message.text.strip())
+        
+        if action == "check":
+            # Проверяем кредиты через безопасную систему
+            result = await check_user_credits(message.from_user.id, user_id)
+            
+            if "error" in result:
+                await message.answer(f"❌ {result['error']}")
+            else:
+                credits_text = f"""
+💰 <b>Баланс кредитов пользователя</b>
+
+👤 <b>User ID:</b> {result['user_id']}
+👤 <b>Username:</b> @{result['username'] or 'не указан'}
+👤 <b>Имя:</b> {result['first_name'] or 'не указано'}
+💎 <b>Кредиты:</b> {result['credits']}
+📊 <b>Статус:</b> {result['status']}
+📅 <b>Регистрация:</b> {result['created_at'][:10] if result['created_at'] else 'неизвестно'}
+🕐 <b>Обновлен:</b> {result['updated_at'][:10] if result['updated_at'] else 'неизвестно'}
+                """
+                
+                await message.answer(
+                    credits_text,
+                    reply_markup=get_back_to_admin_keyboard()
+                )
+            await state.clear()
+            
+        elif action == "grant":
+            # Переходим к вводу количества кредитов
+            await state.update_data(user_id=user_id)
+            
+            await message.answer(
+                f"💎 <b>Выдача кредитов пользователю {user_id}</b>\n\n"
+                f"Введите количество кредитов для выдачи (1-1000):\n\n"
+                f"<i>Например: 50</i>",
+                reply_markup=get_back_to_admin_keyboard()
+            )
+            await state.set_state(AdminStates.waiting_credits_amount)
+            
+    except ValueError:
+        await message.answer("❌ Неверный формат ID. Введите числовой Telegram ID.")
+    except Exception as e:
+        logger.error(f"Error processing user ID for action: {e}")
+        await message.answer("❌ Ошибка при обработке ID пользователя.")
+
+@router.message(AdminStates.waiting_credits_amount)
+async def admin_process_credits_amount(message: Message, state: FSMContext):
+    """Process credits amount input"""
+    if not await is_admin(message.from_user.id):
+        return
+    
+    try:
+        credits = int(message.text.strip())
+        
+        if credits <= 0:
+            await message.answer("❌ Количество кредитов должно быть положительным числом.")
+            return
+            
+        if credits > 1000:
+            await message.answer("❌ Максимальное количество кредитов за раз: 1000")
+            return
+        
+        await state.update_data(credits=credits)
+        
+        await message.answer(
+            f"💎 <b>Выдача {credits} кредитов</b>\n\n"
+            f"Введите причину выдачи кредитов (необязательно):\n\n"
+            f"<i>Например: Компенсация за техническую ошибку</i>\n\n"
+            f"Или отправьте '-' чтобы пропустить:",
+            reply_markup=get_back_to_admin_keyboard()
+        )
+        await state.set_state(AdminStates.waiting_credits_reason)
+        
+    except ValueError:
+        await message.answer("❌ Введите числовое количество кредитов.")
+    except Exception as e:
+        logger.error(f"Error processing credits amount: {e}")
+        await message.answer("❌ Ошибка при обработке количества кредитов.")
+
+@router.message(AdminStates.waiting_credits_reason)
+async def admin_process_credits_reason(message: Message, state: FSMContext):
+    """Process credits reason and complete grant"""
+    if not await is_admin(message.from_user.id):
+        return
+    
+    try:
+        data = await state.get_data()
+        user_id = data.get('user_id')
+        credits = data.get('credits')
+        reason = message.text.strip() if message.text.strip() != '-' else ""
+        
+        # Выдаем кредиты через безопасную систему
+        result = await grant_user_credits(message.from_user.id, user_id, credits, reason)
+        
+        if result.get("success"):
+            success_text = f"""
+✅ <b>КРЕДИТЫ УСПЕШНО ВЫДАНЫ!</b>
+
+👤 <b>Пользователь:</b> {result['user_id']}
+💎 <b>Выдано кредитов:</b> {result['credits_granted']}
+💰 <b>Старый баланс:</b> {result['old_balance']}
+💰 <b>Новый баланс:</b> {result['new_balance']}
+📝 <b>Причина:</b> {result['reason'] or 'Не указана'}
+🕐 <b>Время:</b> {result['timestamp'][:19]}
+
+Операция записана в логи администратора.
+            """
+            await message.answer(
+                success_text,
+                reply_markup=get_back_to_admin_keyboard()
+            )
+        else:
+            await message.answer(
+                f"❌ <b>Ошибка при выдаче кредитов:</b>\n\n{result.get('error')}",
+                reply_markup=get_back_to_admin_keyboard()
+            )
+            
+    except Exception as e:
+        logger.error(f"Error in credit grant completion: {e}")
+        await message.answer(
+            "❌ Ошибка при завершении выдачи кредитов.",
+            reply_markup=get_back_to_admin_keyboard()
+        )
+    
+    await state.clear()
