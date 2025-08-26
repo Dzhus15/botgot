@@ -51,6 +51,11 @@ async def main():
         webhook_task = asyncio.create_task(start_webhook_server())
         logger.info("Webhook server starting in background...")
         
+        # Start payment monitoring in background
+        from utils.payment_monitor import payment_monitor
+        monitor_task = asyncio.create_task(payment_monitor.start_monitoring())
+        logger.info("Payment monitoring started in background...")
+        
         # Start polling
         try:
             await dp.start_polling(bot, skip_updates=True)

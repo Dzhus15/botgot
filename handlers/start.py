@@ -32,8 +32,23 @@ async def start_command(message: Message, state: FSMContext):
         # Clear any existing state
         await state.clear()
         
-        # Welcome message
-        welcome_text = f"""
+        # Check if this is a return from payment
+        start_param = message.text.split(' ', 1)[1] if ' ' in message.text else None
+        if start_param == "payment_success":
+            welcome_text = f"""
+✅ <b>Добро пожаловать обратно!</b>
+
+Привет, {message.from_user.first_name}! 👋
+
+💰 <b>Ваш текущий баланс:</b> {user.credits} кредитов
+
+Если вы только что совершили оплату, кредиты будут зачислены в течение нескольких минут.
+
+Выберите действие из меню ниже:
+            """
+        else:
+            # Regular welcome message
+            welcome_text = f"""
 🎬 <b>Добро пожаловать в AI Video Generator!</b>
 
 Привет, {message.from_user.first_name}! 👋
@@ -43,7 +58,7 @@ async def start_command(message: Message, state: FSMContext):
 💰 <b>Ваш баланс:</b> {user.credits} кредитов
 
 Выберите действие из меню ниже:
-        """
+            """
         
         await message.answer(
             welcome_text,

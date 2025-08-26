@@ -51,7 +51,7 @@ class PaymentAPI:
                 },
                 "confirmation": {
                     "type": "redirect",
-                    "return_url": "https://t.me/VideoAnalizAiBot"
+                    "return_url": "https://t.me/VideoAnalizAiBot?start=payment_success"
                 },
                 "capture": True,
                 "description": description,
