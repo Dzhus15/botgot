@@ -73,6 +73,7 @@ def get_admin_menu_keyboard() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="📊 Статистика пользователей", callback_data="admin_stats")],
         [InlineKeyboardButton(text="📢 Рассылка сообщений", callback_data="admin_broadcast")],
         [InlineKeyboardButton(text="🔍 Проверка платежа", callback_data="admin_check_payment")],
+        [InlineKeyboardButton(text="📨 Отправить уведомление", callback_data="admin_send_notification")],
         [InlineKeyboardButton(text="🔙 Главное меню", callback_data="main_menu")]
     ]
     return InlineKeyboardMarkup(inline_keyboard=keyboard)

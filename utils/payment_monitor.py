@@ -82,7 +82,29 @@ class PaymentMonitor:
                         else:
                             logger.error(f"Failed to process payment {payment_id}")
                 else:
-                    # Payment already processed
+                    # Payment already processed, but ensure user was notified
+                    metadata = result.get('metadata', {})
+                    user_id = metadata.get('user_id')
+                    if user_id and payment_id not in self.processed_payments:
+                        logger.info(f"Ensuring notification for processed payment: {payment_id}")
+                        
+                        # Get user current balance for notification
+                        user = await db.get_user(int(user_id))
+                        if user:
+                            # Find the package credits from amount
+                            amount_float = float(result.get('amount', 0))
+                            credits_added = int(amount_float)  # 1 ruble = 1 credit
+                            
+                            try:
+                                await self.payment_api._notify_payment_success(
+                                    user_id=int(user_id),
+                                    credits_added=credits_added,
+                                    total_credits=user.credits
+                                )
+                                logger.info(f"Sent notification for payment {payment_id}")
+                            except Exception as e:
+                                logger.error(f"Failed to send notification for {payment_id}: {e}")
+                    
                     self.processed_payments.add(payment_id)
             else:
                 logger.info(f"Payment {payment_id} status: {result.get('status')}")

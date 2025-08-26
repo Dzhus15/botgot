@@ -18,6 +18,7 @@ config = Config()
 class AdminStates(StatesGroup):
     waiting_broadcast_message = State()
     waiting_payment_id = State()
+    waiting_user_id_for_notification = State()
 
 async def is_admin(user_id: int) -> bool:
     """Check if user is admin"""
