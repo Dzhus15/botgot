@@ -52,20 +52,16 @@ class VeoAPI:
             
             # Handle image-to-video
             if generation_type == GenerationType.IMAGE_TO_VIDEO and image_file_id:
-                # In a real implementation, you would need to:
-                # 1. Download the image from Telegram
-                # 2. Upload it to a public URL (e.g., cloud storage)
-                # 3. Use that URL in the API request
-                
-                # For now, we'll simulate this process
+                # Upload image using kie.ai File Upload API
                 image_url = await self._upload_telegram_image(image_file_id)
                 if image_url:
                     request_data["imageUrls"] = [image_url]
+                    logger.info(f"Using uploaded image URL: {image_url}")
                 else:
                     logger.error(f"Failed to upload image for task {task_id}")
                     await db.update_video_generation(
                         task_id, "failed", 
-                        error_message="Failed to process image"
+                        error_message="Failed to upload image to kie.ai"
                     )
                     return False
             
@@ -140,41 +136,67 @@ class VeoAPI:
         return False
     
     async def _upload_telegram_image(self, file_id: str) -> Optional[str]:
-        """Upload Telegram image to public URL"""
+        """Upload Telegram image using kie.ai File Upload API"""
         try:
             from aiogram import Bot
             bot = Bot(token=config.TELEGRAM_BOT_TOKEN)
             
+            # Download file from Telegram
             file_info = await bot.get_file(file_id)
             if not file_info.file_path:
                 logger.error(f"No file path for image {file_id}")
                 return None
             
-            file_path = file_info.file_path
-            
-            # Download file
-            file_data = await bot.download_file(file_path)
+            file_data = await bot.download_file(file_info.file_path)
             if not file_data:
                 logger.error(f"Failed to download file data for {file_id}")
                 return None
             
-            # Save to local storage temporarily (in production use cloud storage)
-            os.makedirs("attached_assets/temp_images", exist_ok=True)
-            local_path = f"attached_assets/temp_images/{file_id}.jpg"
+            # Convert file data to bytes
+            file_bytes = file_data.read()
             
-            with open(local_path, "wb") as f:
-                f.write(file_data.read())
+            # Upload to kie.ai File Upload API
+            upload_url = f"https://kieai.redpandaai.co/api/file-stream-upload"
             
-            # Use Replit's file serving for public access
-            # Remove 'attached_assets/' from path for URL
-            url_path = local_path.replace("attached_assets/", "")
-            public_url = f"https://{os.getenv('REPL_SLUG', 'default')}.{os.getenv('REPL_OWNER', 'user')}.repl.co/attached_assets/{url_path}"
+            # Prepare multipart form data
+            form_data = aiohttp.FormData()
+            form_data.add_field('file', 
+                              file_bytes, 
+                              filename=f"{file_id}.jpg",
+                              content_type='image/jpeg')
+            form_data.add_field('uploadPath', 'telegram-images')
+            form_data.add_field('fileName', f"{file_id}.jpg")
             
-            logger.info(f"Image processed: {file_id} -> {local_path}")
-            return public_url
+            headers = {
+                "Authorization": f"Bearer {self.api_key}"
+            }
+            
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    upload_url,
+                    headers=headers,
+                    data=form_data,
+                    timeout=aiohttp.ClientTimeout(total=30)
+                ) as response:
+                    logger.info(f"File upload response status: {response.status}")
+                    
+                    if response.status == 200:
+                        result = await response.json()
+                        logger.info(f"File upload response: {result}")
+                        
+                        if result.get("success") and result.get("data"):
+                            file_url = result["data"].get("fileUrl")
+                            if file_url:
+                                logger.info(f"Image uploaded successfully: {file_id} -> {file_url}")
+                                return file_url
+                    
+                    # Log error response
+                    error_text = await response.text()
+                    logger.error(f"File upload failed: {response.status} - {error_text}")
+                    return None
             
         except Exception as e:
-            logger.error(f"Error processing image {file_id}: {e}")
+            logger.error(f"Error uploading image {file_id}: {e}")
             return None
     
     async def _poll_video_status(self, task_id: str, veo_task_id: str, user_id: int):
