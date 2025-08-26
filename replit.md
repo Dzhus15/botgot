@@ -2,6 +2,16 @@
 
 This is a Telegram bot that generates AI videos using Google's Veo 3 API through the kie.ai platform. The bot provides text-to-video and image-to-video generation capabilities with a credit-based payment system. Users can purchase credits using Telegram Stars or traditional payment methods (YooKassa), and each video generation costs 10 credits. The bot includes comprehensive admin functionality for user management and broadcasting.
 
+# Recent Changes
+
+**2025-08-26**: 
+- ✅ Fixed tokenomics: 399₽ package now gives 50 credits (5 video generations)
+- ✅ Fixed database connection issues in payment monitoring system
+- ✅ Increased rate limiting from 15 to 100 messages per minute
+- ✅ Added manual credit management tool (admin_tools/credit_manager.py)
+- ✅ Hybrid database system: SQLite (current) + PostgreSQL ready for production
+- ✅ User 848867375 compensated with 35 credits for incorrect 399₽ package
+
 # User Preferences
 
 Preferred communication style: Simple, everyday language.
@@ -12,13 +22,13 @@ Preferred communication style: Simple, everyday language.
 Built on aiogram (asynchronous Telegram bot framework) with handler-based routing for different bot commands and interactions. Uses inline keyboards for user navigation and FSM (Finite State Machine) for managing user conversation states during video generation and payment flows.
 
 ## Database Layer
-SQLite-based persistence layer with async operations using aiosqlite. Core entities include:
+Hybrid database system with SQLite-based persistence layer using aiosqlite (currently active) and PostgreSQL support ready for production deployment. Automatically switches to PostgreSQL when asyncpg is available and DATABASE_URL is configured. Core entities include:
 - Users: Telegram ID, credits balance, admin status, user metadata
 - Transactions: Credit purchases and spending with audit trail
 - Video Generations: Task tracking for AI video creation
 - Admin Logs: Activity tracking for administrative actions
 
-Default admin user (ID: 1864913930) receives 100 credits and admin privileges on first registration.
+Default admin user (ID: 1864913930) receives 100 credits and admin privileges on first registration. Database persists data during redeploys when using PostgreSQL.
 
 ## Credit System and Payments
 Dual payment integration supporting:
@@ -35,7 +45,7 @@ Integration with Veo 3 API through kie.ai platform supporting:
 
 ## Security and Rate Limiting
 - Environment variable configuration for all API keys and secrets
-- Rate limiting middleware (5 requests per 30 seconds per user)
+- Rate limiting middleware (100 requests per 60 seconds per user)
 - Input validation for prompts with content filtering
 - Parameterized database queries for SQL injection prevention
 - Comprehensive logging without sensitive data exposure

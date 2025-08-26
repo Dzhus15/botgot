@@ -56,7 +56,7 @@ class PaymentMonitor:
             # Get payment IDs from recent transactions that might not be completed
             cutoff_time = datetime.now() - timedelta(minutes=lookback_minutes)
             
-            async with db.get_connection() as conn:
+            async with db.get_sqlite_connection() as conn:
                 cursor = await conn.execute("""
                     SELECT DISTINCT payment_id FROM transactions 
                     WHERE payment_id IS NOT NULL 
