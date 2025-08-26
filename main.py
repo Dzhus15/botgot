@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+from aiohttp import web
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
@@ -10,22 +11,18 @@ from config import Config
 from database.database import init_database
 from handlers import start, generate, payments, admin
 from middlewares.rate_limit import RateLimitMiddleware
-from webhook_server import start_webhook_server
+from webhook_server import init_webhook_server
 
 # Simple logging setup
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-async def main():
-    """Main function to start the bot"""
+async def start_bot_polling():
+    """Start Telegram bot polling in background"""
     try:
         # Initialize configuration
         config = Config()
         logger.info(f"Starting bot with Veo model: {config.DEFAULT_MODEL}")
-        
-        # Initialize database
-        await init_database()
-        logger.info("Database initialized successfully")
         
         # Initialize bot and dispatcher
         bot = Bot(
@@ -47,23 +44,57 @@ async def main():
         
         logger.info("Bot starting polling...")
         
-        # Start webhook server in background
-        webhook_task = asyncio.create_task(start_webhook_server())
-        logger.info("Webhook server starting in background...")
+        # Start polling
+        await dp.start_polling(bot, skip_updates=True)
+        
+    except Exception as e:
+        logger.error(f"Error starting bot: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        raise
+
+async def main():
+    """Main function to start the web server on port 5000"""
+    try:
+        # Initialize database
+        await init_database()
+        logger.info("Database initialized successfully")
+        
+        # Initialize webhook web application
+        app = await init_webhook_server()
+        
+        # Start bot polling in background
+        bot_task = asyncio.create_task(start_bot_polling())
+        logger.info("Bot polling started in background...")
         
         # Start payment monitoring in background
         from utils.payment_monitor import payment_monitor
         monitor_task = asyncio.create_task(payment_monitor.start_monitoring())
         logger.info("Payment monitoring started in background...")
         
-        # Start polling
+        # Start web server on port 5000 (main process)
+        runner = web.AppRunner(app)
+        await runner.setup()
+        
+        site = web.TCPSite(runner, '0.0.0.0', 5000)
+        await site.start()
+        
+        logger.info("Web server started on port 5000")
+        logger.info("Application endpoints:")
+        logger.info("  POST /webhook/veo-complete/{task_id} - Veo completion callbacks")
+        logger.info("  POST /webhook/yookassa - YooKassa payment notifications")
+        logger.info("  GET /health - Health check")
+        
+        # Keep the server running
         try:
-            await dp.start_polling(bot, skip_updates=True)
+            while True:
+                await asyncio.sleep(3600)  # Sleep for 1 hour
         finally:
-            webhook_task.cancel()
+            bot_task.cancel()
+            monitor_task.cancel()
         
     except Exception as e:
-        logger.error(f"Error starting bot: {e}")
+        logger.error(f"Error starting application: {e}")
         import traceback
         logger.error(traceback.format_exc())
         raise
@@ -72,6 +103,6 @@ if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        logger.info("Bot stopped by user")
+        logger.info("Application stopped by user")
     except Exception as e:
         logger.error(f"Fatal error: {e}")

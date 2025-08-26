@@ -171,31 +171,6 @@ async def init_webhook_server():
     
     return app
 
-async def start_webhook_server():
-    """Start the webhook server on port 5000"""
-    try:
-        app = await init_webhook_server()
-        
-        # Start server on port 5000 (Replit's standard port)
-        runner = web.AppRunner(app)
-        await runner.setup()
-        
-        site = web.TCPSite(runner, '0.0.0.0', 5000)
-        await site.start()
-        
-        logger.info("Webhook server started on port 5000")
-        logger.info("Webhook endpoints:")
-        logger.info("  POST /webhook/veo-complete/{task_id} - Veo completion callbacks")
-        logger.info("  POST /webhook/yookassa - YooKassa payment notifications")
-        logger.info("  GET /health - Health check")
-        
-        # Keep the server running
-        while True:
-            await asyncio.sleep(3600)  # Sleep for 1 hour
-            
-    except Exception as e:
-        logger.error(f"Error starting webhook server: {e}")
-        raise
-
 if __name__ == "__main__":
-    asyncio.run(start_webhook_server())
+    # This file is now imported by main.py, not run directly
+    print("This module should be imported by main.py, not run directly")
