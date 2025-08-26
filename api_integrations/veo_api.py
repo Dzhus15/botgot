@@ -185,10 +185,14 @@ class VeoAPI:
                         logger.info(f"File upload response: {result}")
                         
                         if result.get("success") and result.get("data"):
-                            file_url = result["data"].get("fileUrl")
+                            # File Upload API returns downloadUrl field
+                            file_url = result["data"].get("downloadUrl") or result["data"].get("fileUrl")
                             if file_url:
                                 logger.info(f"Image uploaded successfully: {file_id} -> {file_url}")
                                 return file_url
+                            else:
+                                logger.error(f"No download URL in response: {result}")
+                                return None
                     
                     # Log error response
                     error_text = await response.text()
