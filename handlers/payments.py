@@ -21,9 +21,9 @@ class PaymentStates(StatesGroup):
 CREDIT_PACKAGES = {
     "test_package": {"credits": 1, "price_stars": 1, "price_rub": 1, "title": "🧪 ТЕСТ (1₽)", "test": True},
     "package_1": {"credits": 1, "price_stars": 79, "price_rub": 79, "title": "1 кредит"},
-    "package_5": {"credits": 5, "price_stars": 399, "price_rub": 399, "title": "5 кредитов"},
+    "package_5": {"credits": 50, "price_stars": 399, "price_rub": 399, "title": "5 генераций видео (50 кредитов)"},
     "package_10": {"credits": 10, "price_stars": 749, "price_rub": 749, "title": "10 кредитов", "popular": True},
-    "package_50": {"credits": 50, "price_stars": 3499, "price_rub": 3499, "title": "50 кредитов"},
+    "package_50": {"credits": 500, "price_stars": 3499, "price_rub": 3499, "title": "50 генераций видео (500 кредитов)"},
 }
 
 @router.callback_query(F.data == "buy_credits")
@@ -42,8 +42,8 @@ async def buy_credits_menu(callback: CallbackQuery):
 ⭐️ <b>Telegram Stars</b> - быстро и удобно
 💳 <b>Банковская карта/СБП</b> - через ЮКасса
 
-💡 <b>1 кредит = 79₽</b>
-🎬 <b>1 видео = 10 кредитов (749₽)</b>
+💡 <b>1 кредит от 7.98₽</b> (в пакете)
+🎬 <b>1 видео = 10 кредитов (от 79.8₽)</b>
     """
     
     await callback.message.edit_text(
