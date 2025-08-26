@@ -19,12 +19,10 @@ class PaymentStates(StatesGroup):
 
 # Credit packages - 1 рубль за 1 кредит
 CREDIT_PACKAGES = {
-    "package_10": {"credits": 10, "price_stars": 10, "price_rub": 10, "title": "10 кредитов"},
-    "package_50": {"credits": 50, "price_stars": 50, "price_rub": 50, "title": "50 кредитов"},
-    "package_100": {"credits": 100, "price_stars": 90, "price_rub": 100, "title": "100 кредитов", "popular": True},
-    "package_250": {"credits": 250, "price_stars": 200, "price_rub": 250, "title": "250 кредитов"},
-    "package_500": {"credits": 500, "price_stars": 350, "price_rub": 500, "title": "500 кредитов", "bonus": 50},
-    "package_1000": {"credits": 1000, "price_stars": 650, "price_rub": 1000, "title": "1000 кредитов", "bonus": 150},
+    "package_1": {"credits": 1, "price_stars": 79, "price_rub": 79, "title": "1 кредит"},
+    "package_5": {"credits": 5, "price_stars": 399, "price_rub": 399, "title": "5 кредитов"},
+    "package_10": {"credits": 10, "price_stars": 749, "price_rub": 749, "title": "10 кредитов", "popular": True},
+    "package_50": {"credits": 50, "price_stars": 3499, "price_rub": 3499, "title": "50 кредитов"},
 }
 
 @router.callback_query(F.data == "buy_credits")
@@ -43,8 +41,8 @@ async def buy_credits_menu(callback: CallbackQuery):
 ⭐️ <b>Telegram Stars</b> - быстро и удобно
 💳 <b>Банковская карта/СБП</b> - через ЮКасса
 
-💡 <b>1 кредит = 1₽</b>
-🎬 <b>1 видео = 10 кредитов (10₽)</b>
+💡 **1 кредит = 79₽**
+🎬 **1 видео = 10 кредитов (749₽)**
     """
     
     await callback.message.edit_text(
@@ -57,11 +55,11 @@ async def buy_credits_menu(callback: CallbackQuery):
 async def pay_with_stars(callback: CallbackQuery):
     """Show Telegram Stars payment options"""
     text = """
-⭐️ <b>Оплата Telegram Stars</b>
+⭐️ **Оплата Telegram Stars**
 
 Выберите пакет кредитов:
 
-💎 <b>Популярные пакеты:</b>
+💎 **Популярные пакеты:**
     """
     
     await callback.message.edit_text(
@@ -74,11 +72,11 @@ async def pay_with_stars(callback: CallbackQuery):
 async def pay_with_card(callback: CallbackQuery):
     """Show card payment options"""
     text = """
-💳 <b>Оплата банковской картой</b>
+💳 **Оплата банковской картой**
 
 Выберите пакет кредитов:
 
-💎 <b>Популярные пакеты:</b>
+💎 **Популярные пакеты:**
     """
     
     await callback.message.edit_text(
@@ -91,13 +89,13 @@ async def pay_with_card(callback: CallbackQuery):
 async def pay_with_sbp(callback: CallbackQuery):
     """Show SBP payment options"""
     text = """
-🏦 <b>Оплата через СБП</b>
+🏦 **Оплата через СБП**
 
-<b>Система быстрых платежей</b> - мгновенные переводы между банками России 24/7
+**Система быстрых платежей** - мгновенные переводы между банками России 24/7
 
 Выберите пакет кредитов:
 
-💎 <b>Популярные пакеты:</b>
+💎 **Популярные пакеты:**
     """
     
     await callback.message.edit_text(
@@ -172,9 +170,9 @@ async def process_card_payment(callback: CallbackQuery):
         ])
         
         await callback.message.edit_text(
-            f"💳 <b>Оплата банковской картой</b>\n\n"
-            f"📦 <b>Пакет:</b> {package['title']}\n"
-            f"💰 <b>Стоимость:</b> {package['price_rub']} ₽\n\n"
+            f"💳 **Оплата банковской картой**\n\n"
+            f"📦 **Пакет:** {package['title']}\n"
+            f"💰 **Стоимость:** {package['price_rub']} ₽\n\n"
             f"Нажмите кнопку ниже для перехода к оплате:",
             reply_markup=keyboard
         )
@@ -219,9 +217,9 @@ async def process_sbp_payment(callback: CallbackQuery):
         ])
         
         await callback.message.edit_text(
-            f"🏦 <b>Оплата через СБП</b>\n\n"
-            f"📦 <b>Пакет:</b> {package['title']}\n"
-            f"💰 <b>Стоимость:</b> {package['price_rub']} ₽\n\n"
+            f"🏦 **Оплата через СБП**\n\n"
+            f"📦 **Пакет:** {package['title']}\n"
+            f"💰 **Стоимость:** {package['price_rub']} ₽\n\n"
             f"<b>Система быстрых платежей</b> - мгновенные переводы 24/7\n"
             f"Нажмите кнопку ниже для перехода к оплате:",
             reply_markup=keyboard
@@ -274,10 +272,10 @@ async def process_successful_payment(message: Message):
                 await db.create_transaction(transaction)
                 
                 success_text = f"""
-✅ <b>Платеж успешно завершен!</b>
+✅ **Платеж успешно завершен!**
 
-💰 <b>Добавлено кредитов:</b> {total_credits}
-💳 <b>Ваш баланс:</b> {new_credits} кредитов
+💰 **Добавлено кредитов:** {total_credits}
+💳 **Ваш баланс:** {new_credits} кредитов
 
 Теперь вы можете генерировать видео! 🎬
                 """
