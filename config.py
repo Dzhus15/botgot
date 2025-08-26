@@ -26,8 +26,8 @@ class Config:
     DATABASE_URL: str = os.getenv("DATABASE_URL", "")
     
     # Rate Limiting Configuration
-    RATE_LIMIT_MESSAGES: int = 5  # messages per period
-    RATE_LIMIT_WINDOW: int = 30   # seconds
+    RATE_LIMIT_MESSAGES: int = 15  # messages per period
+    RATE_LIMIT_WINDOW: int = 60   # seconds
     
     # Video Generation Configuration
     DEFAULT_MODEL: str = "veo3_fast"  # Cost-efficient model

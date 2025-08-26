@@ -27,6 +27,14 @@ class RateLimitMiddleware(BaseMiddleware):
             user_id = event.from_user.id if event.from_user else None
         elif isinstance(event, CallbackQuery):
             user_id = event.from_user.id if event.from_user else None
+            # Skip rate limiting for navigation callback queries
+            navigation_callbacks = [
+                "main_menu", "buy_credits", "pay_stars", "pay_card", 
+                "generate_video", "text_to_video", "image_to_video",
+                "admin_panel", "user_stats", "broadcast_menu", "back_to_menu"
+            ]
+            if event.data in navigation_callbacks:
+                return await handler(event, data)
         
         # Skip rate limiting if no user ID found
         if not user_id:
@@ -38,11 +46,11 @@ class RateLimitMiddleware(BaseMiddleware):
             current_time = time.time()
             
             if reset_time > current_time:
-                wait_minutes = int((reset_time - current_time) // 60) + 1
+                wait_seconds = int(reset_time - current_time) + 1
                 
                 rate_limit_message = (
                     f"🚫 <b>Превышен лимит запросов!</b>\n\n"
-                    f"⏱ Попробуйте снова через {wait_minutes} минут.\n\n"
+                    f"⏱ Попробуйте снова через {wait_seconds} секунд.\n\n"
                     f"💡 Это ограничение помогает поддерживать качество сервиса для всех пользователей."
                 )
                 
@@ -50,7 +58,7 @@ class RateLimitMiddleware(BaseMiddleware):
                     await event.answer(rate_limit_message)
                 elif isinstance(event, CallbackQuery):
                     await event.answer(
-                        f"Превышен лимит! Ждите {wait_minutes} мин.",
+                        f"Превышен лимит! Ждите {wait_seconds} сек.",
                         show_alert=True
                     )
                 
