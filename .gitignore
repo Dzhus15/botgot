@@ -1,0 +1,22 @@
+# Replit / IDE junk
+.local/
+.config/
+*.replit
+
+# Logs
+logs/
+*.log
+
+# Databases
+*.db
+
+# Screenshots / assets
+attached_assets/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+venv/
