@@ -1,4 +1,0 @@
-2025-08-26 08:38:25,347 - telegram_bot - ERROR - main:52 - Error starting bot: threads can only be started once
-2025-08-26 08:38:25,350 - telegram_bot - ERROR - <module>:61 - Fatal error: threads can only be started once
-2025-08-26 08:38:55,243 - telegram_bot - ERROR - main:52 - Error starting bot: threads can only be started once
-2025-08-26 08:38:55,244 - telegram_bot - ERROR - <module>:61 - Fatal error: threads can only be started once
